@@ -246,6 +246,50 @@ impl Translator {
                 }
             }
 
+            Expr::Cond(arms, _) => {
+                // Translate cond to nested if-else
+                // cond { c1 => b1, c2 => b2, _ => b3 }
+                // becomes: case c1 of true -> b1; false -> case c2 of true -> b2; false -> b3
+                if arms.is_empty() {
+                    return CoreExpr::Lit(CoreLit::Atom("ok".into()));
+                }
+
+                // Build from the end
+                let mut result = CoreExpr::Lit(CoreLit::Atom("nil".into())); // fallback
+                for (cond, body) in arms.iter().rev() {
+                    let cond_expr = self.translate_expr(cond);
+                    let body_expr = self.translate_expr(body);
+
+                    // Check if condition is a wildcard pattern (variable named "_" or literal true)
+                    let is_else = match cond {
+                        Expr::Var(name, _) if name == "_" => true,
+                        Expr::Bool(true, _) => true,
+                        _ => false,
+                    };
+
+                    if is_else {
+                        result = body_expr;
+                    } else {
+                        result = CoreExpr::Case(
+                            Box::new(cond_expr),
+                            vec![
+                                CoreClause {
+                                    patterns: vec![CorePattern::Lit(CoreLit::Atom("true".into()))],
+                                    guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                    body: body_expr,
+                                },
+                                CoreClause {
+                                    patterns: vec![CorePattern::Lit(CoreLit::Atom("false".into()))],
+                                    guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                    body: result,
+                                },
+                            ],
+                        );
+                    }
+                }
+                result
+            }
+
             Expr::If(cond, then_branch, else_branch, _) => {
                 let cond_expr = self.translate_expr(cond);
                 let then_expr = self.translate_expr(then_branch);

@@ -317,6 +317,21 @@ impl InferenceContext {
                 }
             }
 
+            Expr::Cond(arms, span) => {
+                if arms.is_empty() {
+                    return Ok(Type::Unit);
+                }
+                // All conditions must be Bool, all bodies must have same type
+                let result_type = self.fresh_var();
+                for (cond, body) in arms {
+                    let cond_type = self.infer_expr(env, cond)?;
+                    self.unify(&cond_type, &Type::Bool, *span)?;
+                    let body_type = self.infer_expr(env, body)?;
+                    self.unify(&result_type, &body_type, *span)?;
+                }
+                Ok(self.apply(&result_type))
+            }
+
             Expr::If(cond, then_branch, else_branch, span) => {
                 let cond_type = self.infer_expr(env, cond)?;
                 self.unify(&cond_type, &Type::Bool, *span)?;

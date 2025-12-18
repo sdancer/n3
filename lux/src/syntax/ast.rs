@@ -158,6 +158,7 @@ pub enum Expr {
 
     // Control flow
     If(Box<Expr>, Box<Expr>, Option<Box<Expr>>, Span),
+    Cond(Vec<(Expr, Expr)>, Span), // cond { cond1 => body1, cond2 => body2, ... }
     Match(Box<Expr>, Vec<MatchArm>, Span),
     Block(Vec<Stmt>, Option<Box<Expr>>, Span),
 
@@ -221,6 +222,7 @@ impl Expr {
             Expr::Binary(_, _, _, s) => *s,
             Expr::Unary(_, _, s) => *s,
             Expr::If(_, _, _, s) => *s,
+            Expr::Cond(_, s) => *s,
             Expr::Match(_, _, s) => *s,
             Expr::Block(_, _, s) => *s,
             Expr::Call(_, _, s) => *s,

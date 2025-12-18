@@ -691,6 +691,7 @@ impl Parser {
             }
             TokenKind::If => self.parse_if_expr(),
             TokenKind::Unless => self.parse_unless_expr(),
+            TokenKind::Cond => self.parse_cond_expr(),
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::Spawn => {
                 self.advance();
@@ -787,6 +788,28 @@ impl Parser {
             TokenKind::Or => self.parse_empty_lambda(), // || for empty params
             _ => Err(self.error("Expected expression")),
         }
+    }
+
+    fn parse_cond_expr(&mut self) -> ParseResult<Expr> {
+        let start = self.current_span();
+        self.expect(&TokenKind::Cond)?;
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut arms = Vec::new();
+        while !self.check(&TokenKind::RBrace) {
+            let cond = self.parse_expr()?;
+            self.expect(&TokenKind::FatArrow)?;
+            let body = self.parse_expr()?;
+            arms.push((cond, body));
+
+            // Allow comma or newline between arms
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&TokenKind::RBrace)?;
+        Ok(Expr::Cond(arms, start.merge(self.prev_span())))
     }
 
     fn parse_unless_expr(&mut self) -> ParseResult<Expr> {
