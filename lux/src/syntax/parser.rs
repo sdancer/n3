@@ -67,8 +67,9 @@ impl Parser {
             TokenKind::Fn => self.parse_function().map(Item::Function),
             TokenKind::Type => self.parse_type_alias().map(Item::TypeAlias),
             TokenKind::Enum => self.parse_enum().map(Item::Enum),
+            TokenKind::Struct => self.parse_struct().map(Item::Struct),
             TokenKind::Extern => self.parse_extern().map(Item::Extern),
-            _ => Err(self.error("Expected fn, type, enum, or extern")),
+            _ => Err(self.error("Expected fn, type, enum, struct, or extern")),
         }
     }
 
@@ -310,6 +311,39 @@ impl Parser {
             name,
             type_params,
             variants,
+            span: start.merge(self.prev_span()),
+        })
+    }
+
+    fn parse_struct(&mut self) -> ParseResult<StructDef> {
+        let start = self.current_span();
+        self.expect(&TokenKind::Struct)?;
+        let name = self.expect_type_ident()?;
+        let type_params = self.parse_type_params()?;
+
+        self.expect(&TokenKind::LBrace)?;
+        let mut fields = Vec::new();
+        while !self.check(&TokenKind::RBrace) {
+            let field_start = self.current_span();
+            let field_name = self.expect_ident()?;
+            self.expect(&TokenKind::Colon)?;
+            let field_ty = self.parse_type()?;
+            fields.push(StructField {
+                name: field_name,
+                ty: field_ty,
+                span: field_start.merge(self.prev_span()),
+            });
+            if !self.check(&TokenKind::Comma) {
+                break;
+            }
+            self.advance();
+        }
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(StructDef {
+            name,
+            type_params,
+            fields,
             span: start.merge(self.prev_span()),
         })
     }
@@ -671,7 +705,7 @@ impl Parser {
             }
             TokenKind::TypeIdent(name) => {
                 self.advance();
-                // Could be start of path
+                // Could be start of path, struct init, or just a type name
                 if self.check(&TokenKind::Colon2) {
                     let mut path = vec![name];
                     while self.check(&TokenKind::Colon2) {
@@ -679,6 +713,22 @@ impl Parser {
                         path.push(self.expect_ident_or_type_ident()?);
                     }
                     Ok(Expr::Path(path, start.merge(self.prev_span())))
+                } else if self.check(&TokenKind::LBrace) {
+                    // Struct initialization: Point { x: 1, y: 2 }
+                    self.advance();
+                    let mut fields = Vec::new();
+                    while !self.check(&TokenKind::RBrace) {
+                        let field_name = self.expect_ident()?;
+                        self.expect(&TokenKind::Colon)?;
+                        let field_value = self.parse_expr()?;
+                        fields.push((field_name, field_value));
+                        if !self.check(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                    }
+                    self.expect(&TokenKind::RBrace)?;
+                    Ok(Expr::StructInit(name, fields, start.merge(self.prev_span())))
                 } else {
                     Ok(Expr::Var(name, start))
                 }

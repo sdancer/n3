@@ -88,6 +88,9 @@ fn main() {
                 lux::syntax::ast::Item::Enum(e) => {
                     println!("  enum {} ({} variants)", e.name, e.variants.len());
                 }
+                lux::syntax::ast::Item::Struct(s) => {
+                    println!("  struct {} ({} fields)", s.name, s.fields.len());
+                }
                 lux::syntax::ast::Item::TypeAlias(t) => {
                     println!("  type {}", t.name);
                 }

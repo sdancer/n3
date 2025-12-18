@@ -16,7 +16,25 @@ pub enum Item {
     Function(Function),
     TypeAlias(TypeAlias),
     Enum(EnumDef),
+    Struct(StructDef),
     Extern(ExternBlock),
+}
+
+/// Struct definition
+#[derive(Debug, Clone)]
+pub struct StructDef {
+    pub name: Ident,
+    pub type_params: Vec<Ident>,
+    pub fields: Vec<StructField>,
+    pub span: Span,
+}
+
+/// Struct field
+#[derive(Debug, Clone)]
+pub struct StructField {
+    pub name: Ident,
+    pub ty: TypeExpr,
+    pub span: Span,
 }
 
 /// Function definition
@@ -151,6 +169,7 @@ pub enum Expr {
     Range(Box<Expr>, Box<Expr>, bool, Span), // start..end or start..=end (bool is inclusive)
     Map(Vec<(Expr, Expr)>, Span),            // %{key => value, ...}
     Record(Vec<(Ident, Expr)>, Span),
+    StructInit(Ident, Vec<(Ident, Expr)>, Span), // Point { x: 1, y: 2 }
 
     // Operations
     Binary(Box<Expr>, BinOp, Box<Expr>, Span),
@@ -219,6 +238,7 @@ impl Expr {
             Expr::Range(_, _, _, s) => *s,
             Expr::Map(_, s) => *s,
             Expr::Record(_, s) => *s,
+            Expr::StructInit(_, _, s) => *s,
             Expr::Binary(_, _, _, s) => *s,
             Expr::Unary(_, _, s) => *s,
             Expr::If(_, _, _, s) => *s,

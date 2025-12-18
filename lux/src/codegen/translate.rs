@@ -70,6 +70,9 @@ impl Translator {
                 Item::Enum(_) => {
                     // Enums don't generate code directly - they're just type info
                 }
+                Item::Struct(_) => {
+                    // Structs don't generate code directly - they're just type info
+                }
                 Item::TypeAlias(_) => {
                     // Type aliases don't generate code
                 }
@@ -934,16 +937,15 @@ impl Translator {
                 CoreExpr::Call("maps".into(), "get".into(), vec![key_expr, container_expr])
             }
 
-            Expr::Field(obj, _field, _) => {
-                // Record field access - translate to element/2 for tuples
-                // or maps:get for maps. For now, assume tuple-based records
+            Expr::Field(obj, field, _) => {
+                // Field access - translate to maps:get(field, obj)
+                // Structs and records are translated to maps
                 let obj_expr = self.translate_expr(obj);
-                // This is a simplification - real implementation needs type info
                 CoreExpr::Call(
-                    "erlang".into(),
-                    "element".into(),
+                    "maps".into(),
+                    "get".into(),
                     vec![
-                        CoreExpr::Lit(CoreLit::Int(2)), // placeholder index
+                        CoreExpr::Lit(CoreLit::Atom(field.clone())),
                         obj_expr,
                     ],
                 )
@@ -971,6 +973,20 @@ impl Translator {
                     Box::new(CoreExpr::Var(format!("'{}'/{}", method, all_args.len()))),
                     all_args,
                 )
+            }
+
+            Expr::StructInit(_name, fields, _) => {
+                // Translate struct to map with atom keys
+                let entries: Vec<(CoreExpr, CoreExpr)> = fields
+                    .iter()
+                    .map(|(name, expr)| {
+                        (
+                            CoreExpr::Lit(CoreLit::Atom(name.clone())),
+                            self.translate_expr(expr),
+                        )
+                    })
+                    .collect();
+                CoreExpr::Map(entries)
             }
 
             Expr::Record(fields, _) => {
