@@ -565,6 +565,72 @@ impl Translator {
                         } else if name == "make_ref" && arg_exprs.is_empty() {
                             // make_ref() -> erlang:make_ref()
                             CoreExpr::Call("erlang".to_string(), "make_ref".to_string(), vec![])
+                        } else if name == "str_length" && arg_exprs.len() == 1 {
+                            // str_length(s) -> string:length(s)
+                            CoreExpr::Call("string".to_string(), "length".to_string(), arg_exprs)
+                        } else if name == "str_concat" && arg_exprs.len() == 2 {
+                            // str_concat(a, b) -> string:concat(a, b)
+                            CoreExpr::Call("string".to_string(), "concat".to_string(), arg_exprs)
+                        } else if name == "str_split" && arg_exprs.len() == 2 {
+                            // str_split(s, sep) -> string:split(s, sep, all)
+                            let mut args = arg_exprs;
+                            args.push(CoreExpr::Lit(CoreLit::Atom("all".into())));
+                            CoreExpr::Call("string".to_string(), "split".to_string(), args)
+                        } else if name == "str_join" && arg_exprs.len() == 2 {
+                            // str_join(list, sep) -> lists:join(sep, list)
+                            let mut args: Vec<_> = arg_exprs.into_iter().collect();
+                            args.reverse(); // swap order for lists:join
+                            CoreExpr::Call("lists".to_string(), "join".to_string(), args)
+                        } else if name == "str_trim" && arg_exprs.len() == 1 {
+                            // str_trim(s) -> string:trim(s)
+                            CoreExpr::Call("string".to_string(), "trim".to_string(), arg_exprs)
+                        } else if name == "str_upper" && arg_exprs.len() == 1 {
+                            // str_upper(s) -> string:uppercase(s)
+                            CoreExpr::Call("string".to_string(), "uppercase".to_string(), arg_exprs)
+                        } else if name == "str_lower" && arg_exprs.len() == 1 {
+                            // str_lower(s) -> string:lowercase(s)
+                            CoreExpr::Call("string".to_string(), "lowercase".to_string(), arg_exprs)
+                        } else if name == "str_replace" && arg_exprs.len() == 3 {
+                            // str_replace(s, from, to) -> string:replace(s, from, to, all)
+                            let mut args = arg_exprs;
+                            args.push(CoreExpr::Lit(CoreLit::Atom("all".into())));
+                            CoreExpr::Call("string".to_string(), "replace".to_string(), args)
+                        } else if name == "str_contains" && arg_exprs.len() == 2 {
+                            // str_contains(s, sub) -> string:find(s, sub) != nomatch
+                            let find_call = CoreExpr::Call("string".to_string(), "find".to_string(), arg_exprs);
+                            CoreExpr::Call("erlang".to_string(), "/=".to_string(),
+                                vec![find_call, CoreExpr::Lit(CoreLit::Atom("nomatch".into()))])
+                        } else if name == "str_starts_with" && arg_exprs.len() == 2 {
+                            // str_starts_with(s, prefix) -> string:prefix(s, prefix)
+                            CoreExpr::Call("string".to_string(), "prefix".to_string(), arg_exprs)
+                        } else if name == "chars" && arg_exprs.len() == 1 {
+                            // chars(s) -> string:to_graphemes(s)
+                            CoreExpr::Call("string".to_string(), "to_graphemes".to_string(), arg_exprs)
+                        } else if name == "take" && arg_exprs.len() == 2 {
+                            // take(n, list) -> lists:sublist(list, n)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("lists".to_string(), "sublist".to_string(), vec![args[1].clone(), args[0].clone()])
+                        } else if name == "drop" && arg_exprs.len() == 2 {
+                            // drop(n, list) -> lists:nthtail(n, list)
+                            CoreExpr::Call("lists".to_string(), "nthtail".to_string(), arg_exprs)
+                        } else if name == "nth" && arg_exprs.len() == 2 {
+                            // nth(n, list) -> lists:nth(n, list)
+                            CoreExpr::Call("lists".to_string(), "nth".to_string(), arg_exprs)
+                        } else if name == "zip" && arg_exprs.len() == 2 {
+                            // zip(a, b) -> lists:zip(a, b)
+                            CoreExpr::Call("lists".to_string(), "zip".to_string(), arg_exprs)
+                        } else if name == "unzip" && arg_exprs.len() == 1 {
+                            // unzip(list) -> lists:unzip(list)
+                            CoreExpr::Call("lists".to_string(), "unzip".to_string(), arg_exprs)
+                        } else if name == "enumerate" && arg_exprs.len() == 1 {
+                            // enumerate(list) -> lists:enumerate(list)
+                            CoreExpr::Call("lists".to_string(), "enumerate".to_string(), arg_exprs)
+                        } else if name == "member" && arg_exprs.len() == 2 {
+                            // member(elem, list) -> lists:member(elem, list)
+                            CoreExpr::Call("lists".to_string(), "member".to_string(), arg_exprs)
+                        } else if name == "unique" && arg_exprs.len() == 1 {
+                            // unique(list) -> lists:usort(list)
+                            CoreExpr::Call("lists".to_string(), "usort".to_string(), arg_exprs)
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
