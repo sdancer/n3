@@ -275,6 +275,6 @@ impl Pattern {
 /// Statements (only in blocks)
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Let(Ident, Option<TypeExpr>, Expr, Span),
+    Let(Pattern, Option<TypeExpr>, Expr, Span),
     Expr(Expr),
 }

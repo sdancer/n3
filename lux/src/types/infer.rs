@@ -285,7 +285,7 @@ impl InferenceContext {
 
                 for stmt in stmts {
                     match stmt {
-                        Stmt::Let(name, ty_ann, init, span) => {
+                        Stmt::Let(pattern, ty_ann, init, span) => {
                             let init_type = self.infer_expr(&local_env, init)?;
 
                             if let Some(ann) = ty_ann {
@@ -293,8 +293,8 @@ impl InferenceContext {
                                 self.unify(&init_type, &ann_type, *span)?;
                             }
 
-                            let scheme = self.generalize(&local_env, &self.apply(&init_type));
-                            local_env.insert(name.clone(), scheme);
+                            // Extract variables from pattern and add to environment
+                            self.bind_pattern_vars(&mut local_env, pattern, &self.apply(&init_type));
                         }
                         Stmt::Expr(e) => {
                             self.infer_expr(&local_env, e)?;
@@ -395,6 +395,60 @@ impl InferenceContext {
 
             // TODO: implement remaining expression types
             _ => Ok(self.fresh_var()),
+        }
+    }
+
+    /// Bind variables from a pattern to the environment with appropriate types
+    fn bind_pattern_vars(&mut self, env: &mut TypeEnv, pattern: &crate::syntax::ast::Pattern, ty: &Type) {
+        use crate::syntax::ast::Pattern;
+        match pattern {
+            Pattern::Var(name, _) => {
+                let scheme = self.generalize(env, ty);
+                env.insert(name.clone(), scheme);
+            }
+            Pattern::Wildcard(_) => {
+                // No binding needed
+            }
+            Pattern::Tuple(pats, _) => {
+                // For tuples, try to destructure the type
+                if let Type::Tuple(elem_types) = ty {
+                    for (pat, elem_ty) in pats.iter().zip(elem_types.iter()) {
+                        self.bind_pattern_vars(env, pat, elem_ty);
+                    }
+                } else {
+                    // Type mismatch - bind all vars as fresh type vars
+                    for pat in pats {
+                        let fresh = self.fresh_var();
+                        self.bind_pattern_vars(env, pat, &fresh);
+                    }
+                }
+            }
+            Pattern::List(pats, tail, _) => {
+                if let Type::List(elem_ty) = ty {
+                    for pat in pats {
+                        self.bind_pattern_vars(env, pat, elem_ty);
+                    }
+                    if let Some(tail_pat) = tail {
+                        self.bind_pattern_vars(env, tail_pat, ty);
+                    }
+                }
+            }
+            Pattern::Constructor(_, fields, _) => {
+                // For constructors, we'd need type info - for now use fresh vars
+                for pat in fields {
+                    let fresh = self.fresh_var();
+                    self.bind_pattern_vars(env, pat, &fresh);
+                }
+            }
+            Pattern::Record(fields, _) => {
+                for (_, pat) in fields {
+                    let fresh = self.fresh_var();
+                    self.bind_pattern_vars(env, pat, &fresh);
+                }
+            }
+            _ => {
+                // Literals don't bind variables
+            }
         }
     }
 }

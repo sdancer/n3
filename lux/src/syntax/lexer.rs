@@ -30,9 +30,14 @@ impl<'a> Lexer<'a> {
     }
 
     fn next_token(&mut self) -> Token {
-        self.skip_whitespace_and_comments();
+        let saw_newline = self.skip_whitespace_and_comments();
 
         let start = self.pos;
+
+        // Emit newline token if we crossed a line boundary
+        if saw_newline {
+            return Token::new(TokenKind::Newline, Span::new(start as u32, start as u32));
+        }
 
         let Some((_, ch)) = self.advance() else {
             return Token::new(TokenKind::Eof, Span::new(start as u32, start as u32));
@@ -159,11 +164,16 @@ impl<'a> Lexer<'a> {
         self.chars.peek().map(|(_, ch)| *ch)
     }
 
-    fn skip_whitespace_and_comments(&mut self) {
+    fn skip_whitespace_and_comments(&mut self) -> bool {
+        let mut saw_newline = false;
         loop {
             match self.peek_char() {
-                Some(' ' | '\t' | '\n' | '\r') => {
+                Some(' ' | '\t' | '\r') => {
                     self.advance();
+                }
+                Some('\n') => {
+                    self.advance();
+                    saw_newline = true;
                 }
                 Some('/') => {
                     // Look ahead for //
@@ -186,6 +196,7 @@ impl<'a> Lexer<'a> {
                 _ => break,
             }
         }
+        saw_newline
     }
 
     fn identifier(&mut self, start: usize) -> TokenKind {

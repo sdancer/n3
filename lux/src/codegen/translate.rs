@@ -1,6 +1,13 @@
 use crate::codegen::erlang::*;
 use crate::syntax::ast::{self, Expr, InterpolatedPart, Item, Module, Pattern, Stmt};
 
+/// Helper enum for let binding types
+#[derive(Debug)]
+enum LetPart {
+    Simple(String),           // Simple variable binding
+    Pattern(CorePattern),     // Pattern destructuring
+}
+
 /// Convert PascalCase to snake_case
 fn to_snake_case(s: &str) -> String {
     let mut result = String::new();
@@ -424,19 +431,34 @@ impl Translator {
     }
 
     fn translate_block(&mut self, stmts: &[Stmt], final_expr: Option<&Expr>) -> CoreExpr {
-        let mut bindings = Vec::new();
+        let mut result_parts: Vec<(LetPart, CoreExpr)> = Vec::new();
 
         for stmt in stmts {
             match stmt {
-                Stmt::Let(name, _, init, _) => {
+                Stmt::Let(pattern, _, init, _) => {
                     let init_expr = self.translate_expr(init);
-                    bindings.push((self.to_core_var(name), init_expr));
+                    match pattern {
+                        Pattern::Var(name, _) => {
+                            // Simple variable binding
+                            result_parts.push((LetPart::Simple(self.to_core_var(name)), init_expr));
+                        }
+                        Pattern::Wildcard(_) => {
+                            // Wildcard - just evaluate for side effects
+                            let var = self.fresh_var();
+                            result_parts.push((LetPart::Simple(var), init_expr));
+                        }
+                        _ => {
+                            // Pattern destructuring - use case expression
+                            let core_pattern = self.translate_pattern(pattern);
+                            result_parts.push((LetPart::Pattern(core_pattern), init_expr));
+                        }
+                    }
                 }
                 Stmt::Expr(expr) => {
                     // Expression statement - bind to throwaway var
                     let var = self.fresh_var();
                     let expr = self.translate_expr(expr);
-                    bindings.push((var, expr));
+                    result_parts.push((LetPart::Simple(var), expr));
                 }
             }
         }
@@ -445,12 +467,27 @@ impl Translator {
             .map(|e| self.translate_expr(e))
             .unwrap_or(CoreExpr::Lit(CoreLit::Atom("ok".into())));
 
-        if bindings.is_empty() {
+        if result_parts.is_empty() {
             body
         } else {
-            // Build nested lets from inside out
-            bindings.into_iter().rev().fold(body, |acc, (name, expr)| {
-                CoreExpr::Let(vec![(name, expr)], Box::new(acc))
+            // Build nested lets/cases from inside out
+            result_parts.into_iter().rev().fold(body, |acc, (part, expr)| {
+                match part {
+                    LetPart::Simple(name) => {
+                        CoreExpr::Let(vec![(name, expr)], Box::new(acc))
+                    }
+                    LetPart::Pattern(pattern) => {
+                        // Use case expression for pattern destructuring
+                        CoreExpr::Case(
+                            Box::new(expr),
+                            vec![CoreClause {
+                                patterns: vec![pattern],
+                                guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                body: acc,
+                            }],
+                        )
+                    }
+                }
             })
         }
     }

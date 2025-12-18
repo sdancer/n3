@@ -5,6 +5,8 @@ use crate::syntax::token::{StringPart, Token, TokenKind};
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
+    /// True if we just skipped a newline
+    after_newline: bool,
 }
 
 pub type ParseResult<T> = Result<T, ParseError>;
@@ -26,7 +28,16 @@ impl ParseError {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0 }
+        Parser { tokens, pos: 0, after_newline: false }
+    }
+
+    /// Skip any newline tokens and track if we saw one
+    fn skip_newlines(&mut self) {
+        self.after_newline = false;
+        while matches!(self.tokens.get(self.pos).map(|t| &t.kind), Some(TokenKind::Newline)) {
+            self.pos += 1;
+            self.after_newline = true;
+        }
     }
 
     pub fn parse_module(&mut self) -> ParseResult<Module> {
@@ -375,7 +386,7 @@ impl Parser {
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
         let start = self.current_span();
         self.expect(&TokenKind::Let)?;
-        let name = self.expect_ident()?;
+        let pattern = self.parse_pattern()?;
         let ty = if self.check(&TokenKind::Colon) {
             self.advance();
             Some(self.parse_type()?)
@@ -384,7 +395,7 @@ impl Parser {
         };
         self.expect(&TokenKind::Eq)?;
         let expr = self.parse_expr()?;
-        Ok(Stmt::Let(name, ty, expr, start.merge(self.prev_span())))
+        Ok(Stmt::Let(pattern, ty, expr, start.merge(self.prev_span())))
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
@@ -503,6 +514,17 @@ impl Parser {
         let mut expr = self.parse_primary_expr()?;
 
         loop {
+            // Check for call continuation - don't continue across newlines
+            // First check if next token is newline
+            if self.check_no_skip(&TokenKind::Newline) {
+                // Skip the newlines and mark that we saw them
+                self.skip_newlines();
+                // Don't continue call parsing if next is ( - that's a new expression
+                if matches!(self.peek_no_skip(), TokenKind::LParen) {
+                    break;
+                }
+            }
+
             if self.check(&TokenKind::LParen) {
                 let start = expr.span();
                 self.advance();
@@ -994,25 +1016,40 @@ impl Parser {
 
     // Helper methods
 
-    fn peek(&self) -> &TokenKind {
+    fn peek(&mut self) -> &TokenKind {
+        self.skip_newlines();
         self.tokens
             .get(self.pos)
             .map(|t| &t.kind)
             .unwrap_or(&TokenKind::Eof)
     }
 
-    fn check(&self, kind: &TokenKind) -> bool {
+    /// Peek without skipping newlines - for checking call continuation
+    fn peek_no_skip(&self) -> &TokenKind {
+        self.tokens
+            .get(self.pos)
+            .map(|t| &t.kind)
+            .unwrap_or(&TokenKind::Eof)
+    }
+
+    fn check(&mut self, kind: &TokenKind) -> bool {
         std::mem::discriminant(self.peek()) == std::mem::discriminant(kind)
     }
 
+    /// Check without skipping newlines
+    fn check_no_skip(&self, kind: &TokenKind) -> bool {
+        std::mem::discriminant(self.peek_no_skip()) == std::mem::discriminant(kind)
+    }
+
     fn advance(&mut self) -> &Token {
+        self.skip_newlines();
         if !self.is_at_end() {
             self.pos += 1;
         }
         &self.tokens[self.pos - 1]
     }
 
-    fn is_at_end(&self) -> bool {
+    fn is_at_end(&mut self) -> bool {
         matches!(self.peek(), TokenKind::Eof)
     }
 
