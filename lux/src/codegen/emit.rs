@@ -117,6 +117,21 @@ impl Emitter {
                 write!(&mut self.output, "}}~").unwrap();
             }
 
+            CoreExpr::Binary(elements) => {
+                // Core Erlang binary syntax: #{#<elem1>#, #<elem2>#, ...}#
+                // Simple case: bytes are just values
+                write!(&mut self.output, "#{{").unwrap();
+                for (i, elem) in elements.iter().enumerate() {
+                    if i > 0 {
+                        write!(&mut self.output, ",").unwrap();
+                    }
+                    write!(&mut self.output, "#<").unwrap();
+                    self.emit_expr(elem);
+                    write!(&mut self.output, ">(8,1,'integer',['unsigned'|['big']])").unwrap();
+                }
+                write!(&mut self.output, "}}#").unwrap();
+            }
+
             CoreExpr::Fun(params, body) => {
                 write!(&mut self.output, "fun (").unwrap();
                 for (i, p) in params.iter().enumerate() {

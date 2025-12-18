@@ -780,6 +780,22 @@ impl Parser {
             TokenKind::Unless => self.parse_unless_expr(),
             TokenKind::Cond => self.parse_cond_expr(),
             TokenKind::Match => self.parse_match_expr(),
+            TokenKind::LtLt => {
+                // Binary/bitstring literal: <<1, 2, 3>> or <<"hello">>
+                self.advance();
+                let mut elements = Vec::new();
+                if !self.check(&TokenKind::GtGt) {
+                    loop {
+                        elements.push(self.parse_expr()?);
+                        if !self.check(&TokenKind::Comma) {
+                            break;
+                        }
+                        self.advance();
+                    }
+                }
+                self.expect(&TokenKind::GtGt)?;
+                Ok(Expr::BitString(elements, start.merge(self.prev_span())))
+            }
             TokenKind::Spawn => {
                 self.advance();
                 self.expect(&TokenKind::LParen)?;

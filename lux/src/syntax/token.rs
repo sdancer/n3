@@ -72,8 +72,10 @@ pub enum TokenKind {
     NotEq,     // !=
     Lt,        // <
     LtEq,      // <=
+    LtLt,      // << (binary start)
     Gt,        // >
     GtEq,      // >=
+    GtGt,      // >> (binary end)
     And,       // &&
     Or,        // ||
     Not,       // !

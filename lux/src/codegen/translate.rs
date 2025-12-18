@@ -743,6 +743,17 @@ impl Translator {
                         } else if name == "list_to_tuple" && arg_exprs.len() == 1 {
                             // list_to_tuple(list) -> erlang:list_to_tuple(list)
                             CoreExpr::Call("erlang".to_string(), "list_to_tuple".to_string(), arg_exprs)
+                        // Binary functions
+                        } else if name == "byte_size" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "byte_size".to_string(), arg_exprs)
+                        } else if name == "bit_size" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "bit_size".to_string(), arg_exprs)
+                        } else if name == "binary_to_list" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "binary_to_list".to_string(), arg_exprs)
+                        } else if name == "list_to_binary" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "list_to_binary".to_string(), arg_exprs)
+                        } else if name == "is_binary" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_binary".to_string(), arg_exprs)
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
@@ -1016,6 +1027,11 @@ impl Translator {
                     Box::new(CoreExpr::Var(format!("'{}'/{}", method, all_args.len()))),
                     all_args,
                 )
+            }
+
+            Expr::BitString(elements, _) => {
+                let elems: Vec<CoreExpr> = elements.iter().map(|e| self.translate_expr(e)).collect();
+                CoreExpr::Binary(elems)
             }
 
             Expr::StructInit(_name, fields, _) => {

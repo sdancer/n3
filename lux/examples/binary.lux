@@ -1,0 +1,17 @@
+// Test binary/bitstring literals
+mod bintest
+
+fn main() -> () {
+    // Simple binary with byte values
+    let b1 = <<1, 2, 3>>
+    print(b1)
+
+    // Binary with computed values
+    let x = 65
+    let b2 = <<x, x + 1, x + 2>>
+    print(b2)
+
+    // Check binary size
+    print(byte_size(b1))
+    print(byte_size(b2))
+}

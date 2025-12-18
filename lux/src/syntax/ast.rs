@@ -180,6 +180,7 @@ pub enum Expr {
     Map(Vec<(Expr, Expr)>, Span),            // %{key => value, ...}
     Record(Vec<(Ident, Expr)>, Span),
     StructInit(Ident, Vec<(Ident, Expr)>, Span), // Point { x: 1, y: 2 }
+    BitString(Vec<Expr>, Span),              // <<1, 2, 3>> or <<"hello">>
 
     // Operations
     Binary(Box<Expr>, BinOp, Box<Expr>, Span),
@@ -250,6 +251,7 @@ impl Expr {
             Expr::Map(_, s) => *s,
             Expr::Record(_, s) => *s,
             Expr::StructInit(_, _, s) => *s,
+            Expr::BitString(_, s) => *s,
             Expr::Binary(_, _, _, s) => *s,
             Expr::Unary(_, _, s) => *s,
             Expr::If(_, _, _, s) => *s,
