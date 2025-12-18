@@ -480,6 +480,102 @@ impl Translator {
                             CoreExpr::Call("erlang".to_string(), "is_pid".to_string(), arg_exprs)
                         } else if name == "is_function" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "is_function".to_string(), arg_exprs)
+                        } else if name == "assert" && arg_exprs.len() == 1 {
+                            // assert(cond) -> case cond of true -> ok; false -> error(assertion_failed)
+                            let cond = arg_exprs.into_iter().next().unwrap();
+                            CoreExpr::Case(
+                                Box::new(cond),
+                                vec![
+                                    CoreClause {
+                                        patterns: vec![CorePattern::Lit(CoreLit::Atom("true".into()))],
+                                        guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                        body: CoreExpr::Lit(CoreLit::Atom("ok".into())),
+                                    },
+                                    CoreClause {
+                                        patterns: vec![CorePattern::Lit(CoreLit::Atom("false".into()))],
+                                        guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                        body: CoreExpr::Call("erlang".into(), "error".into(),
+                                            vec![CoreExpr::Lit(CoreLit::Atom("assertion_failed".into()))]),
+                                    },
+                                ],
+                            )
+                        } else if name == "dbg" && arg_exprs.len() == 1 {
+                            // dbg(x) -> io:format("DBG: ~p~n", [x]), x
+                            let x = arg_exprs.into_iter().next().unwrap();
+                            let tmp = self.fresh_var();
+                            let format_str = CoreExpr::Lit(CoreLit::String("DBG: ~p~n".to_string()));
+                            let args_list = CoreExpr::Cons(
+                                Box::new(CoreExpr::Var(tmp.clone())),
+                                Box::new(CoreExpr::Lit(CoreLit::Nil))
+                            );
+                            let print_call = CoreExpr::Call("io".into(), "format".into(), vec![format_str, args_list]);
+                            CoreExpr::Let(
+                                vec![(tmp.clone(), x)],
+                                Box::new(CoreExpr::Seq(
+                                    Box::new(print_call),
+                                    Box::new(CoreExpr::Var(tmp))
+                                ))
+                            )
+                        } else if name == "typeof" && arg_exprs.len() == 1 {
+                            // typeof(x) -> returns atom describing type
+                            let x = arg_exprs.into_iter().next().unwrap();
+                            let tmp = self.fresh_var();
+                            CoreExpr::Let(
+                                vec![(tmp.clone(), x)],
+                                Box::new(CoreExpr::Case(
+                                    Box::new(CoreExpr::Lit(CoreLit::Atom("true".into()))),
+                                    vec![
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_integer".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("integer".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_float".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("float".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_atom".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("atom".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_list".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("list".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_tuple".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("tuple".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_map".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("map".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_pid".into(),
+                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("pid".into())),
+                                        },
+                                        CoreClause {
+                                            patterns: vec![CorePattern::Var("_".into())],
+                                            guard: CoreExpr::Call("erlang".into(), "is_function".into(),
+                                                vec![CoreExpr::Var(tmp)]),
+                                            body: CoreExpr::Lit(CoreLit::Atom("function".into())),
+                                        },
+                                    ],
+                                ))
+                            )
                         } else if self.lookup_function(name).is_some() {
                             // Local function call - use apply with local fun reference
                             CoreExpr::Apply(
