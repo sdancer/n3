@@ -216,6 +216,21 @@ impl InferenceContext {
                 Ok(Type::List(Box::new(self.apply(&elem_type))))
             }
 
+            Expr::Map(entries, span) => {
+                let key_type = self.fresh_var();
+                let value_type = self.fresh_var();
+                for (k, v) in entries {
+                    let kt = self.infer_expr(env, k)?;
+                    let vt = self.infer_expr(env, v)?;
+                    self.unify(&key_type, &kt, *span)?;
+                    self.unify(&value_type, &vt, *span)?;
+                }
+                Ok(Type::Map(
+                    Box::new(self.apply(&key_type)),
+                    Box::new(self.apply(&value_type)),
+                ))
+            }
+
             Expr::Range(start, end, _inclusive, span) => {
                 let start_type = self.infer_expr(env, start)?;
                 let end_type = self.infer_expr(env, end)?;

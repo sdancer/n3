@@ -107,6 +107,13 @@ pub fn unify(t1: &Type, t2: &Type, span: Span) -> Result<Substitution, TypeError
         // Lists
         (Type::List(elem1), Type::List(elem2)) => unify(elem1, elem2, span),
 
+        // Maps
+        (Type::Map(k1, v1), Type::Map(k2, v2)) => {
+            let subst = unify(k1, k2, span)?;
+            let s2 = unify(&subst.apply(v1), &subst.apply(v2), span)?;
+            Ok(subst.compose(&s2))
+        }
+
         // Records (structural)
         (Type::Record(fields1), Type::Record(fields2)) => {
             if fields1.len() != fields2.len() {

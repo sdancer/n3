@@ -75,7 +75,14 @@ impl<'a> Lexer<'a> {
                 }
             }
             '*' => TokenKind::Star,
-            '%' => TokenKind::Percent,
+            '%' => {
+                if self.peek_char() == Some('{') {
+                    self.advance();
+                    TokenKind::HashBrace
+                } else {
+                    TokenKind::Percent
+                }
+            }
 
             // Multi-char operators
             '-' => {

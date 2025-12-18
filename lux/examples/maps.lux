@@ -1,0 +1,17 @@
+// Test map literals
+mod maptest
+
+fn create_map() {
+    let m = %{:name => "Alice", :age => 30}
+    print(m)
+}
+
+fn number_map() {
+    let squares = %{1 => 1, 2 => 4, 3 => 9, 4 => 16}
+    print(squares)
+}
+
+fn main() -> () {
+    create_map()
+    number_map()
+}

@@ -149,6 +149,7 @@ pub enum Expr {
         span: Span,
     },
     Range(Box<Expr>, Box<Expr>, bool, Span), // start..end or start..=end (bool is inclusive)
+    Map(Vec<(Expr, Expr)>, Span),            // %{key => value, ...}
     Record(Vec<(Ident, Expr)>, Span),
 
     // Operations
@@ -198,6 +199,7 @@ impl Expr {
             Expr::List(_, _, s) => *s,
             Expr::ListComp { span, .. } => *span,
             Expr::Range(_, _, _, s) => *s,
+            Expr::Map(_, s) => *s,
             Expr::Record(_, s) => *s,
             Expr::Binary(_, _, _, s) => *s,
             Expr::Unary(_, _, s) => *s,

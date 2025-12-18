@@ -164,6 +164,14 @@ impl Translator {
                 })
             }
 
+            Expr::Map(entries, _) => {
+                let core_entries: Vec<(CoreExpr, CoreExpr)> = entries
+                    .iter()
+                    .map(|(k, v)| (self.translate_expr(k), self.translate_expr(v)))
+                    .collect();
+                CoreExpr::Map(core_entries)
+            }
+
             Expr::Range(start, end, inclusive, _) => {
                 let start_expr = self.translate_expr(start);
                 let end_expr = if *inclusive {

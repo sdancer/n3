@@ -761,6 +761,7 @@ impl Parser {
                 Ok(Expr::List(exprs, tail, start.merge(self.prev_span())))
             }
             TokenKind::LBrace => self.parse_block_expr(),
+            TokenKind::HashBrace => self.parse_map_expr(),
             TokenKind::Pipe => self.parse_lambda(),
             TokenKind::Or => self.parse_empty_lambda(), // || for empty params
             _ => Err(self.error("Expected expression")),
@@ -1031,6 +1032,34 @@ impl Parser {
             Box::new(body),
             start.merge(self.prev_span()),
         ))
+    }
+
+    /// Parse a map expression: %{key => value, ...}
+    fn parse_map_expr(&mut self) -> ParseResult<Expr> {
+        let start = self.current_span();
+        self.expect(&TokenKind::HashBrace)?;
+
+        let mut entries = Vec::new();
+
+        if !self.check(&TokenKind::RBrace) {
+            loop {
+                let key = self.parse_expr()?;
+                self.expect(&TokenKind::FatArrow)?;
+                let value = self.parse_expr()?;
+                entries.push((key, value));
+
+                if !self.check(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+                if self.check(&TokenKind::RBrace) {
+                    break;
+                }
+            }
+        }
+
+        self.expect(&TokenKind::RBrace)?;
+        Ok(Expr::Map(entries, start.merge(self.prev_span())))
     }
 
     /// Parse a list comprehension after seeing `[expr for`

@@ -22,6 +22,7 @@ pub enum Type {
     // Compound types
     Tuple(Vec<Type>),
     List(Box<Type>),
+    Map(Box<Type>, Box<Type>), // Map<K, V>
     Function(Vec<Type>, Box<Type>),
     Record(Vec<(String, Type)>),
 
@@ -41,6 +42,7 @@ impl Type {
             Type::Var(_) => false,
             Type::Tuple(ts) => ts.iter().all(|t| t.is_concrete()),
             Type::List(t) => t.is_concrete(),
+            Type::Map(k, v) => k.is_concrete() && v.is_concrete(),
             Type::Function(params, ret) => {
                 params.iter().all(|t| t.is_concrete()) && ret.is_concrete()
             }
@@ -96,6 +98,7 @@ impl Substitution {
             ),
             Type::Tuple(ts) => Type::Tuple(ts.iter().map(|t| self.apply(t)).collect()),
             Type::List(elem) => Type::List(Box::new(self.apply(elem))),
+            Type::Map(k, v) => Type::Map(Box::new(self.apply(k)), Box::new(self.apply(v))),
             Type::Record(fields) => {
                 Type::Record(fields.iter().map(|(n, t)| (n.clone(), self.apply(t))).collect())
             }

@@ -104,6 +104,19 @@ impl Emitter {
                 write!(&mut self.output, "]").unwrap();
             }
 
+            CoreExpr::Map(entries) => {
+                write!(&mut self.output, "~{{").unwrap();
+                for (i, (key, val)) in entries.iter().enumerate() {
+                    if i > 0 {
+                        write!(&mut self.output, ",").unwrap();
+                    }
+                    self.emit_expr(key);
+                    write!(&mut self.output, "=>").unwrap();
+                    self.emit_expr(val);
+                }
+                write!(&mut self.output, "}}~").unwrap();
+            }
+
             CoreExpr::Fun(params, body) => {
                 write!(&mut self.output, "fun (").unwrap();
                 for (i, p) in params.iter().enumerate() {
