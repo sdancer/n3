@@ -754,6 +754,31 @@ impl Translator {
                             CoreExpr::Call("erlang".to_string(), "list_to_binary".to_string(), arg_exprs)
                         } else if name == "is_binary" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "is_binary".to_string(), arg_exprs)
+                        // More utility functions
+                        } else if name == "apply" && arg_exprs.len() == 2 {
+                            // apply(fun, args) -> erlang:apply(fun, args)
+                            CoreExpr::Call("erlang".to_string(), "apply".to_string(), arg_exprs)
+                        } else if name == "apply" && arg_exprs.len() == 3 {
+                            // apply(mod, fun, args) -> erlang:apply(mod, fun, args)
+                            CoreExpr::Call("erlang".to_string(), "apply".to_string(), arg_exprs)
+                        } else if name == "atom_to_list" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "atom_to_list".to_string(), arg_exprs)
+                        } else if name == "list_to_atom" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "list_to_atom".to_string(), arg_exprs)
+                        } else if name == "integer_to_list" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "integer_to_list".to_string(), arg_exprs)
+                        } else if name == "list_to_integer" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "list_to_integer".to_string(), arg_exprs)
+                        } else if name == "float_to_list" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "float_to_list".to_string(), arg_exprs)
+                        } else if name == "list_to_float" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "list_to_float".to_string(), arg_exprs)
+                        } else if name == "iolist_to_binary" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "iolist_to_binary".to_string(), arg_exprs)
+                        } else if name == "term_to_binary" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "term_to_binary".to_string(), arg_exprs)
+                        } else if name == "binary_to_term" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "binary_to_term".to_string(), arg_exprs)
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
