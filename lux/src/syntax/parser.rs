@@ -715,6 +715,10 @@ impl Parser {
                 self.advance();
                 Ok(Expr::Float(f, start))
             }
+            TokenKind::Char(c) => {
+                self.advance();
+                Ok(Expr::Char(c, start))
+            }
             TokenKind::String(s) => {
                 self.advance();
                 Ok(Expr::String(s, start))

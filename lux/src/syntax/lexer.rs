@@ -166,6 +166,9 @@ impl<'a> Lexer<'a> {
             // String literal
             '"' => self.string(),
 
+            // Char literal 'a' or '\n'
+            '\'' => self.char_lit(),
+
             // Number
             '0'..='9' => self.number(ch),
 
@@ -263,6 +266,34 @@ impl<'a> Lexer<'a> {
         }
         let text = &self.source[start..self.pos];
         TokenKind::Atom(text.to_string())
+    }
+
+    fn char_lit(&mut self) -> TokenKind {
+        let ch = match self.peek_char() {
+            Some('\\') => {
+                self.advance();
+                match self.advance() {
+                    Some((_, 'n')) => '\n',
+                    Some((_, 't')) => '\t',
+                    Some((_, 'r')) => '\r',
+                    Some((_, '\\')) => '\\',
+                    Some((_, '\'')) => '\'',
+                    Some((_, '0')) => '\0',
+                    Some((_, c)) => return TokenKind::Error(format!("Invalid char escape: \\{}", c)),
+                    None => return TokenKind::Error("Unterminated char literal".into()),
+                }
+            }
+            Some(c) => {
+                self.advance();
+                c
+            }
+            None => return TokenKind::Error("Unterminated char literal".into()),
+        };
+
+        match self.advance() {
+            Some((_, '\'')) => TokenKind::Char(ch),
+            _ => TokenKind::Error("Expected closing ' for char literal".into()),
+        }
     }
 
     fn string(&mut self) -> TokenKind {

@@ -24,6 +24,7 @@ pub enum TokenKind {
     // Literals
     Int(i64),
     Float(f64),
+    Char(char),
     String(String),
     InterpolatedString(Vec<StringPart>), // "hello ${name}!"
     Atom(String),      // :name

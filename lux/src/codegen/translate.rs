@@ -122,6 +122,7 @@ impl Translator {
         match expr {
             Expr::Int(n, _) => CoreExpr::Lit(CoreLit::Int(*n)),
             Expr::Float(f, _) => CoreExpr::Lit(CoreLit::Float(*f)),
+            Expr::Char(c, _) => CoreExpr::Lit(CoreLit::Int(*c as i64)), // Chars are integers in Erlang
             Expr::String(s, _) => CoreExpr::Lit(CoreLit::String(s.clone())),
             Expr::InterpolatedString(parts, _) => {
                 // Build format string and arguments for io_lib:format
@@ -704,6 +705,28 @@ impl Translator {
                         } else if name == "get_cwd" && arg_exprs.is_empty() {
                             // get_cwd() -> file:get_cwd()
                             CoreExpr::Call("file".to_string(), "get_cwd".to_string(), vec![])
+                        } else if name == "argv" && arg_exprs.is_empty() {
+                            // argv() -> init:get_plain_arguments()
+                            CoreExpr::Call("init".to_string(), "get_plain_arguments".to_string(), vec![])
+                        } else if name == "env" && arg_exprs.len() == 1 {
+                            // env(name) -> os:getenv(name)
+                            CoreExpr::Call("os".to_string(), "getenv".to_string(), arg_exprs)
+                        } else if name == "set_env" && arg_exprs.len() == 2 {
+                            // set_env(name, value) -> os:putenv(name, value)
+                            CoreExpr::Call("os".to_string(), "putenv".to_string(), arg_exprs)
+                        } else if name == "exit_code" && arg_exprs.len() == 1 {
+                            // exit_code(n) -> erlang:halt(n)
+                            CoreExpr::Call("erlang".to_string(), "halt".to_string(), arg_exprs)
+                        // Process dictionary
+                        } else if name == "get" && arg_exprs.len() == 1 {
+                            // get(key) -> erlang:get(key)
+                            CoreExpr::Call("erlang".to_string(), "get".to_string(), arg_exprs)
+                        } else if name == "put" && arg_exprs.len() == 2 {
+                            // put(key, value) -> erlang:put(key, value)
+                            CoreExpr::Call("erlang".to_string(), "put".to_string(), arg_exprs)
+                        } else if name == "erase" && arg_exprs.len() == 1 {
+                            // erase(key) -> erlang:erase(key)
+                            CoreExpr::Call("erlang".to_string(), "erase".to_string(), arg_exprs)
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();

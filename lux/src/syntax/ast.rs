@@ -157,6 +157,7 @@ pub enum Expr {
     // Literals
     Int(i64, Span),
     Float(f64, Span),
+    Char(char, Span),
     String(String, Span),
     InterpolatedString(Vec<InterpolatedPart>, Span), // "hello ${name}!"
     Bool(bool, Span),
@@ -235,6 +236,7 @@ impl Expr {
         match self {
             Expr::Int(_, s) => *s,
             Expr::Float(_, s) => *s,
+            Expr::Char(_, s) => *s,
             Expr::String(_, s) => *s,
             Expr::InterpolatedString(_, s) => *s,
             Expr::Bool(_, s) => *s,
