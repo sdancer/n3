@@ -305,6 +305,36 @@ impl Translator {
                                 |acc, elem| CoreExpr::Cons(Box::new(elem), Box::new(acc))
                             );
                             CoreExpr::Call("io".to_string(), "format".to_string(), vec![format_str, args_list])
+                        } else if name == "length" && arg_exprs.len() == 1 {
+                            // length(list) -> erlang:length(list)
+                            CoreExpr::Call("erlang".to_string(), "length".to_string(), arg_exprs)
+                        } else if name == "hd" && arg_exprs.len() == 1 {
+                            // hd(list) -> erlang:hd(list)
+                            CoreExpr::Call("erlang".to_string(), "hd".to_string(), arg_exprs)
+                        } else if name == "tl" && arg_exprs.len() == 1 {
+                            // tl(list) -> erlang:tl(list)
+                            CoreExpr::Call("erlang".to_string(), "tl".to_string(), arg_exprs)
+                        } else if name == "abs" && arg_exprs.len() == 1 {
+                            // abs(n) -> erlang:abs(n)
+                            CoreExpr::Call("erlang".to_string(), "abs".to_string(), arg_exprs)
+                        } else if name == "max" && arg_exprs.len() == 2 {
+                            // max(a, b) -> erlang:max(a, b)
+                            CoreExpr::Call("erlang".to_string(), "max".to_string(), arg_exprs)
+                        } else if name == "min" && arg_exprs.len() == 2 {
+                            // min(a, b) -> erlang:min(a, b)
+                            CoreExpr::Call("erlang".to_string(), "min".to_string(), arg_exprs)
+                        } else if name == "reverse" && arg_exprs.len() == 1 {
+                            // reverse(list) -> lists:reverse(list)
+                            CoreExpr::Call("lists".to_string(), "reverse".to_string(), arg_exprs)
+                        } else if name == "sort" && arg_exprs.len() == 1 {
+                            // sort(list) -> lists:sort(list)
+                            CoreExpr::Call("lists".to_string(), "sort".to_string(), arg_exprs)
+                        } else if name == "append" && arg_exprs.len() == 2 {
+                            // append(a, b) -> lists:append(a, b)
+                            CoreExpr::Call("lists".to_string(), "append".to_string(), arg_exprs)
+                        } else if name == "flatten" && arg_exprs.len() == 1 {
+                            // flatten(list) -> lists:flatten(list)
+                            CoreExpr::Call("lists".to_string(), "flatten".to_string(), arg_exprs)
                         } else if self.lookup_function(name).is_some() {
                             // Local function call - use apply with local fun reference
                             CoreExpr::Apply(
