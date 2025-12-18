@@ -752,7 +752,23 @@ impl Parser {
         self.expect(&TokenKind::Receive)?;
         self.expect(&TokenKind::LBrace)?;
         let mut arms = Vec::new();
+        let mut timeout = None;
+
         while !self.check(&TokenKind::RBrace) {
+            // Check for after clause
+            if self.check(&TokenKind::After) {
+                self.advance();
+                let timeout_ms = self.parse_expr()?;
+                self.expect(&TokenKind::FatArrow)?;
+                let timeout_body = self.parse_expr()?;
+                timeout = Some((Box::new(timeout_ms), Box::new(timeout_body)));
+                // after clause must be last
+                if self.check(&TokenKind::Comma) {
+                    self.advance();
+                }
+                break;
+            }
+
             arms.push(self.parse_match_arm()?);
             if !self.check(&TokenKind::Comma) {
                 break;
@@ -760,7 +776,11 @@ impl Parser {
             self.advance();
         }
         self.expect(&TokenKind::RBrace)?;
-        Ok(Expr::Receive(arms, start.merge(self.prev_span())))
+        Ok(Expr::Receive {
+            arms,
+            timeout,
+            span: start.merge(self.prev_span()),
+        })
     }
 
     fn parse_match_arm(&mut self) -> ParseResult<MatchArm> {

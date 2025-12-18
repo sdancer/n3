@@ -359,12 +359,17 @@ impl InferenceContext {
                 Ok(msg_type)
             }
 
-            Expr::Receive(arms, span) => {
+            Expr::Receive { arms, timeout, span } => {
                 let result_type = self.fresh_var();
                 for arm in arms {
                     // TODO: proper pattern typing
                     let arm_type = self.infer_expr(env, &arm.body)?;
                     self.unify(&result_type, &arm_type, *span)?;
+                }
+                // Check timeout body type if present
+                if let Some((_, timeout_body)) = timeout {
+                    let timeout_type = self.infer_expr(env, timeout_body)?;
+                    self.unify(&result_type, &timeout_type, *span)?;
                 }
                 Ok(self.apply(&result_type))
             }

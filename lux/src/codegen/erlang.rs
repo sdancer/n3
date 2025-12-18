@@ -42,7 +42,7 @@ pub enum CoreExpr {
     // Receive - generates a letrec with primops
     Receive {
         clauses: Vec<CoreClause>,
-        timeout: Option<Box<CoreExpr>>,
+        timeout: Option<(Box<CoreExpr>, Box<CoreExpr>)>, // (timeout_ms, timeout_body)
     },
 
     // Lambda

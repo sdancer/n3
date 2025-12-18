@@ -37,6 +37,7 @@ pub enum TokenKind {
     Spawn,
     Send,
     Receive,
+    After,    // after (for receive timeout)
     SelfKw,   // self
     Extern,
     Return,
@@ -95,6 +96,7 @@ impl TokenKind {
             "spawn" => Some(TokenKind::Spawn),
             "send" => Some(TokenKind::Send),
             "receive" => Some(TokenKind::Receive),
+            "after" => Some(TokenKind::After),
             "self" => Some(TokenKind::SelfKw),
             "extern" => Some(TokenKind::Extern),
             "return" => Some(TokenKind::Return),

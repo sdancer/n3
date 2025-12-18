@@ -302,7 +302,7 @@ impl Translator {
                 CoreExpr::Call("erlang".into(), "send".into(), vec![pid_expr, msg_expr])
             }
 
-            Expr::Receive(arms, _) => {
+            Expr::Receive { arms, timeout, .. } => {
                 let clauses: Vec<CoreClause> = arms
                     .iter()
                     .map(|arm| {
@@ -321,9 +321,13 @@ impl Translator {
                     })
                     .collect();
 
+                let timeout_expr = timeout.as_ref().map(|(ms, body)| {
+                    (self.translate_expr(ms), self.translate_expr(body))
+                });
+
                 CoreExpr::Receive {
                     clauses,
-                    timeout: None,
+                    timeout: timeout_expr.map(|(ms, body)| (Box::new(ms), Box::new(body))),
                 }
             }
 

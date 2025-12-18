@@ -149,7 +149,11 @@ pub enum Expr {
     // Process primitives
     Spawn(Box<Expr>, Span),
     Send(Box<Expr>, Box<Expr>, Span),
-    Receive(Vec<MatchArm>, Span),
+    Receive {
+        arms: Vec<MatchArm>,
+        timeout: Option<(Box<Expr>, Box<Expr>)>, // (timeout_ms, timeout_body)
+        span: Span,
+    },
     SelfPid(Span),
 
     // Return
@@ -181,7 +185,7 @@ impl Expr {
             Expr::Path(_, s) => *s,
             Expr::Spawn(_, s) => *s,
             Expr::Send(_, _, s) => *s,
-            Expr::Receive(_, s) => *s,
+            Expr::Receive { span, .. } => *span,
             Expr::SelfPid(s) => *s,
             Expr::Return(_, s) => *s,
         }

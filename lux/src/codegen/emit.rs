@@ -174,7 +174,7 @@ impl Emitter {
 
             CoreExpr::Receive { clauses, timeout } => {
                 // Generate receive using primops (required for modern Core Erlang)
-                self.emit_receive_primop(clauses, timeout.as_deref());
+                self.emit_receive_primop(clauses, timeout.as_ref().map(|(ms, body)| (ms.as_ref(), body.as_ref())));
             }
 
             CoreExpr::Primop(op, args) => {
@@ -273,7 +273,7 @@ impl Emitter {
     }
 
     /// Generate receive using the primop-based approach required by modern Core Erlang
-    fn emit_receive_primop(&mut self, clauses: &[CoreClause], _timeout: Option<&CoreExpr>) {
+    fn emit_receive_primop(&mut self, clauses: &[CoreClause], timeout: Option<(&CoreExpr, &CoreExpr)>) {
         // Generate a letrec with a receive loop matching Erlang compiler output format exactly
         // The letrec_goto annotation tells the compiler this is a receive loop
         writeln!(&mut self.output, "( letrec").unwrap();
@@ -345,13 +345,31 @@ impl Emitter {
         writeln!(&mut self.output, "let <_timeout_result> =").unwrap();
         self.indent += 1;
         self.emit_indent();
-        writeln!(&mut self.output, "primop 'recv_wait_timeout' ('infinity')").unwrap();
+
+        // Emit timeout value or infinity
+        write!(&mut self.output, "primop 'recv_wait_timeout' (").unwrap();
+        if let Some((timeout_ms, _)) = timeout {
+            self.emit_expr(timeout_ms);
+        } else {
+            write!(&mut self.output, "'infinity'").unwrap();
+        }
+        writeln!(&mut self.output, ")").unwrap();
+
         self.indent -= 1;
         self.emit_indent();
         writeln!(&mut self.output, "in case _timeout_result of").unwrap();
         self.indent += 1;
         self.emit_indent();
-        writeln!(&mut self.output, "<'true'> when 'true' -> 'timeout'").unwrap();
+
+        // Timeout occurred - emit timeout body or default
+        write!(&mut self.output, "<'true'> when 'true' -> ").unwrap();
+        if let Some((_, timeout_body)) = timeout {
+            self.emit_expr(timeout_body);
+        } else {
+            write!(&mut self.output, "'timeout'").unwrap();
+        }
+        writeln!(&mut self.output).unwrap();
+
         self.emit_indent();
         writeln!(&mut self.output, "<'false'> when 'true' -> apply 'recv$^0'/0 ()").unwrap();
         self.indent -= 1;
