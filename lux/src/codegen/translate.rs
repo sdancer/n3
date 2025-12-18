@@ -178,6 +178,7 @@ impl Translator {
                     ast::BinOp::Mul => ("erlang", "*"),
                     ast::BinOp::Div => ("erlang", "div"),
                     ast::BinOp::Mod => ("erlang", "rem"),
+                    ast::BinOp::Concat => ("erlang", "++"),
                     ast::BinOp::Eq => ("erlang", "=:="),
                     ast::BinOp::NotEq => ("erlang", "=/="),
                     ast::BinOp::Lt => ("erlang", "<"),

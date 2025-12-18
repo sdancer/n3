@@ -476,6 +476,7 @@ impl Parser {
         loop {
             let op = match self.peek() {
                 TokenKind::Plus => BinOp::Add,
+                TokenKind::PlusPlus => BinOp::Concat,
                 TokenKind::Minus => BinOp::Sub,
                 _ => break,
             };

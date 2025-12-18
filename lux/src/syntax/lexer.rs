@@ -54,7 +54,14 @@ impl<'a> Lexer<'a> {
             ',' => TokenKind::Comma,
             ';' => TokenKind::Semi,
             '.' => TokenKind::Dot,
-            '+' => TokenKind::Plus,
+            '+' => {
+                if self.peek_char() == Some('+') {
+                    self.advance();
+                    TokenKind::PlusPlus
+                } else {
+                    TokenKind::Plus
+                }
+            }
             '*' => TokenKind::Star,
             '%' => TokenKind::Percent,
 

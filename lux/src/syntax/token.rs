@@ -55,6 +55,7 @@ pub enum TokenKind {
 
     // Operators
     Plus,      // +
+    PlusPlus,  // ++ (list/string concat)
     Minus,     // -
     Star,      // *
     Slash,     // /

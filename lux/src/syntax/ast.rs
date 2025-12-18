@@ -224,6 +224,7 @@ pub enum BinOp {
     Mul,
     Div,
     Mod,
+    Concat, // ++ (list/string concatenation)
     Eq,
     NotEq,
     Lt,

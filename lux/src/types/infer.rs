@@ -264,6 +264,12 @@ impl InferenceContext {
                         self.unify(&right_type, &Type::Bool, *span)?;
                         Ok(Type::Bool)
                     }
+                    BinOp::Concat => {
+                        // ++ concatenates lists or strings
+                        // Both sides must be the same type
+                        self.unify(&left_type, &right_type, *span)?;
+                        Ok(self.apply(&left_type))
+                    }
                     BinOp::Pipe => {
                         // Pipe operator: x |> f  means f(x)
                         let ret_type = self.fresh_var();
