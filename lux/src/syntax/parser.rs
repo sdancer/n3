@@ -690,6 +690,7 @@ impl Parser {
                 Ok(Expr::SelfPid(start.merge(self.prev_span())))
             }
             TokenKind::If => self.parse_if_expr(),
+            TokenKind::Unless => self.parse_unless_expr(),
             TokenKind::Match => self.parse_match_expr(),
             TokenKind::Spawn => {
                 self.advance();
@@ -786,6 +787,27 @@ impl Parser {
             TokenKind::Or => self.parse_empty_lambda(), // || for empty params
             _ => Err(self.error("Expected expression")),
         }
+    }
+
+    fn parse_unless_expr(&mut self) -> ParseResult<Expr> {
+        let start = self.current_span();
+        self.expect(&TokenKind::Unless)?;
+        let cond = self.parse_expr()?;
+        // Wrap condition in Not
+        let negated_cond = Expr::Unary(UnaryOp::Not, Box::new(cond), start);
+        let then_branch = self.parse_block_expr()?;
+        let else_branch = if self.check(&TokenKind::Else) {
+            self.advance();
+            Some(Box::new(self.parse_block_expr()?))
+        } else {
+            None
+        };
+        Ok(Expr::If(
+            Box::new(negated_cond),
+            Box::new(then_branch),
+            else_branch,
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_if_expr(&mut self) -> ParseResult<Expr> {
