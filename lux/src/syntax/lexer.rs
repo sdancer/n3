@@ -1,5 +1,5 @@
 use crate::syntax::span::Span;
-use crate::syntax::token::{Token, TokenKind};
+use crate::syntax::token::{StringPart, Token, TokenKind};
 
 pub struct Lexer<'a> {
     source: &'a str,
@@ -226,28 +226,143 @@ impl<'a> Lexer<'a> {
     }
 
     fn string(&mut self) -> TokenKind {
-        let mut value = String::new();
+        let mut parts: Vec<StringPart> = Vec::new();
+        let mut current = String::new();
+        let mut has_interpolation = false;
+
         loop {
-            match self.advance() {
-                Some((_, '"')) => break,
-                Some((_, '\\')) => {
+            match self.peek_char() {
+                Some('"') => {
+                    self.advance();
+                    break;
+                }
+                Some('\\') => {
+                    self.advance();
                     match self.advance() {
-                        Some((_, 'n')) => value.push('\n'),
-                        Some((_, 't')) => value.push('\t'),
-                        Some((_, 'r')) => value.push('\r'),
-                        Some((_, '\\')) => value.push('\\'),
-                        Some((_, '"')) => value.push('"'),
+                        Some((_, 'n')) => current.push('\n'),
+                        Some((_, 't')) => current.push('\t'),
+                        Some((_, 'r')) => current.push('\r'),
+                        Some((_, '\\')) => current.push('\\'),
+                        Some((_, '"')) => current.push('"'),
+                        Some((_, '$')) => current.push('$'), // escape interpolation
                         Some((_, ch)) => {
                             return TokenKind::Error(format!("Invalid escape: \\{}", ch))
                         }
                         None => return TokenKind::Error("Unterminated string".into()),
                     }
                 }
-                Some((_, ch)) => value.push(ch),
+                Some('$') => {
+                    // Check for ${
+                    let mut temp = self.chars.clone();
+                    temp.next(); // consume $
+                    if temp.peek().map(|(_, c)| *c) == Some('{') {
+                        // Found interpolation
+                        has_interpolation = true;
+                        if !current.is_empty() {
+                            parts.push(StringPart::Literal(std::mem::take(&mut current)));
+                        }
+                        self.advance(); // $
+                        self.advance(); // {
+
+                        // Lex the expression until matching }
+                        let expr_tokens = self.lex_interpolated_expr();
+                        match expr_tokens {
+                            Ok(tokens) => parts.push(StringPart::Expr(tokens)),
+                            Err(e) => return TokenKind::Error(e),
+                        }
+                    } else {
+                        self.advance();
+                        current.push('$');
+                    }
+                }
+                Some(_) => {
+                    let (_, ch) = self.advance().unwrap();
+                    current.push(ch);
+                }
                 None => return TokenKind::Error("Unterminated string".into()),
             }
         }
-        TokenKind::String(value)
+
+        if has_interpolation {
+            if !current.is_empty() {
+                parts.push(StringPart::Literal(current));
+            }
+            TokenKind::InterpolatedString(parts)
+        } else {
+            TokenKind::String(current)
+        }
+    }
+
+    /// Lex tokens inside a string interpolation ${...}
+    fn lex_interpolated_expr(&mut self) -> Result<Vec<Token>, String> {
+        let mut tokens = Vec::new();
+        let mut brace_depth = 1;
+
+        loop {
+            self.skip_whitespace_and_comments();
+            let start = self.pos;
+
+            match self.peek_char() {
+                Some('{') => {
+                    self.advance();
+                    brace_depth += 1;
+                    tokens.push(Token::new(TokenKind::LBrace, Span::new(start as u32, self.pos as u32)));
+                }
+                Some('}') => {
+                    self.advance();
+                    brace_depth -= 1;
+                    if brace_depth == 0 {
+                        break;
+                    }
+                    tokens.push(Token::new(TokenKind::RBrace, Span::new(start as u32, self.pos as u32)));
+                }
+                Some(ch) => {
+                    // Lex a single token
+                    let kind = match ch {
+                        '(' => { self.advance(); TokenKind::LParen }
+                        ')' => { self.advance(); TokenKind::RParen }
+                        '[' => { self.advance(); TokenKind::LBracket }
+                        ']' => { self.advance(); TokenKind::RBracket }
+                        ',' => { self.advance(); TokenKind::Comma }
+                        '.' => { self.advance(); TokenKind::Dot }
+                        '+' => { self.advance(); TokenKind::Plus }
+                        '-' => { self.advance(); TokenKind::Minus }
+                        '*' => { self.advance(); TokenKind::Star }
+                        '/' => { self.advance(); TokenKind::Slash }
+                        '%' => { self.advance(); TokenKind::Percent }
+                        ':' => {
+                            self.advance();
+                            if self.peek_char() == Some(':') {
+                                self.advance();
+                                TokenKind::Colon2
+                            } else if self.peek_char().map(|c| c.is_alphabetic()).unwrap_or(false) {
+                                self.atom()
+                            } else {
+                                TokenKind::Colon
+                            }
+                        }
+                        '"' => {
+                            self.advance();
+                            self.string()
+                        }
+                        '0'..='9' => {
+                            self.advance();
+                            self.number(ch)
+                        }
+                        'a'..='z' | '_' => self.identifier(start),
+                        'A'..='Z' => self.type_identifier(start),
+                        _ => {
+                            self.advance();
+                            TokenKind::Error(format!("Unexpected char in interpolation: {}", ch))
+                        }
+                    };
+                    tokens.push(Token::new(kind, Span::new(start as u32, self.pos as u32)));
+                }
+                None => return Err("Unterminated string interpolation".into()),
+            }
+        }
+
+        Ok(tokens)
     }
 
     fn number(&mut self, first: char) -> TokenKind {

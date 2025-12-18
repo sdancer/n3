@@ -1,5 +1,5 @@
 use crate::codegen::erlang::*;
-use crate::syntax::ast::{self, Expr, Item, Module, Pattern, Stmt};
+use crate::syntax::ast::{self, Expr, InterpolatedPart, Item, Module, Pattern, Stmt};
 
 /// Convert PascalCase to snake_case
 fn to_snake_case(s: &str) -> String {
@@ -109,6 +109,30 @@ impl Translator {
             Expr::Int(n, _) => CoreExpr::Lit(CoreLit::Int(*n)),
             Expr::Float(f, _) => CoreExpr::Lit(CoreLit::Float(*f)),
             Expr::String(s, _) => CoreExpr::Lit(CoreLit::String(s.clone())),
+            Expr::InterpolatedString(parts, _) => {
+                // Build format string and arguments for io_lib:format
+                let mut format_str = String::new();
+                let mut args = Vec::new();
+
+                for part in parts {
+                    match part {
+                        InterpolatedPart::Literal(s) => {
+                            // Escape ~ characters in literals for io_lib:format
+                            format_str.push_str(&s.replace('~', "~~"));
+                        }
+                        InterpolatedPart::Expr(e) => {
+                            format_str.push_str("~p");
+                            args.push(self.translate_expr(e));
+                        }
+                    }
+                }
+
+                // io_lib:format returns an iolist, wrap with lists:flatten to get string
+                let format_expr = CoreExpr::Lit(CoreLit::String(format_str));
+                let args_list = self.build_list(args);
+                let io_list = CoreExpr::Call("io_lib".into(), "format".into(), vec![format_expr, args_list]);
+                CoreExpr::Call("lists".into(), "flatten".into(), vec![io_list])
+            }
             Expr::Bool(b, _) => CoreExpr::Lit(CoreLit::Atom(if *b { "true" } else { "false" }.into())),
             Expr::Atom(a, _) => CoreExpr::Lit(CoreLit::Atom(a.clone())),
             Expr::Unit(_) => CoreExpr::Lit(CoreLit::Atom("ok".into())),

@@ -175,6 +175,15 @@ impl InferenceContext {
             Expr::Int(_, _) => Ok(Type::Int),
             Expr::Float(_, _) => Ok(Type::Float),
             Expr::String(_, _) => Ok(Type::String),
+            Expr::InterpolatedString(parts, _) => {
+                // Check that all interpolated expressions are valid
+                for part in parts {
+                    if let crate::syntax::ast::InterpolatedPart::Expr(e) = part {
+                        self.infer_expr(env, e)?;
+                    }
+                }
+                Ok(Type::String)
+            }
             Expr::Bool(_, _) => Ok(Type::Bool),
             Expr::Atom(_, _) => Ok(Type::Atom),
             Expr::Unit(_) => Ok(Type::Unit),

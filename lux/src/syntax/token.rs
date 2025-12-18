@@ -12,12 +12,20 @@ impl Token {
     }
 }
 
+/// Parts of an interpolated string
+#[derive(Debug, Clone, PartialEq)]
+pub enum StringPart {
+    Literal(String),
+    Expr(Vec<Token>), // tokens to be parsed as expression
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub enum TokenKind {
     // Literals
     Int(i64),
     Float(f64),
     String(String),
+    InterpolatedString(Vec<StringPart>), // "hello ${name}!"
     Atom(String),      // :name
     Bool(bool),
 

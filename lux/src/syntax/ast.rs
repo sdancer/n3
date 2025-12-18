@@ -109,6 +109,13 @@ impl TypeExpr {
     }
 }
 
+/// Part of an interpolated string
+#[derive(Debug, Clone)]
+pub enum InterpolatedPart {
+    Literal(String),
+    Expr(Box<Expr>),
+}
+
 /// Expressions
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -116,6 +123,7 @@ pub enum Expr {
     Int(i64, Span),
     Float(f64, Span),
     String(String, Span),
+    InterpolatedString(Vec<InterpolatedPart>, Span), // "hello ${name}!"
     Bool(bool, Span),
     Atom(String, Span),
     Unit(Span),
@@ -166,6 +174,7 @@ impl Expr {
             Expr::Int(_, s) => *s,
             Expr::Float(_, s) => *s,
             Expr::String(_, s) => *s,
+            Expr::InterpolatedString(_, s) => *s,
             Expr::Bool(_, s) => *s,
             Expr::Atom(_, s) => *s,
             Expr::Unit(s) => *s,

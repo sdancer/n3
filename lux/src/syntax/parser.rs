@@ -1,6 +1,6 @@
 use crate::syntax::ast::*;
 use crate::syntax::span::Span;
-use crate::syntax::token::{Token, TokenKind};
+use crate::syntax::token::{StringPart, Token, TokenKind};
 
 pub struct Parser {
     tokens: Vec<Token>,
@@ -582,6 +582,11 @@ impl Parser {
                 self.advance();
                 Ok(Expr::String(s, start))
             }
+            TokenKind::InterpolatedString(parts) => {
+                self.advance();
+                let ast_parts = self.parse_interpolated_parts(parts)?;
+                Ok(Expr::InterpolatedString(ast_parts, start.merge(self.prev_span())))
+            }
             TokenKind::Bool(b) => {
                 self.advance();
                 Ok(Expr::Bool(b, start))
@@ -967,6 +972,24 @@ impl Parser {
             Box::new(body),
             start.merge(self.prev_span()),
         ))
+    }
+
+    fn parse_interpolated_parts(&mut self, parts: Vec<StringPart>) -> ParseResult<Vec<InterpolatedPart>> {
+        let mut result = Vec::new();
+        for part in parts {
+            match part {
+                StringPart::Literal(s) => {
+                    result.push(InterpolatedPart::Literal(s));
+                }
+                StringPart::Expr(tokens) => {
+                    // Parse the tokens as an expression
+                    let mut sub_parser = Parser::new(tokens);
+                    let expr = sub_parser.parse_expr()?;
+                    result.push(InterpolatedPart::Expr(Box::new(expr)));
+                }
+            }
+        }
+        Ok(result)
     }
 
     // Helper methods
