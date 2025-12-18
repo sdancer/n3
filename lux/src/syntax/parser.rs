@@ -1,4 +1,4 @@
-use crate::syntax::ast::*;
+use crate::syntax::ast::{Generator, *};
 use crate::syntax::span::Span;
 use crate::syntax::token::{StringPart, Token, TokenKind};
 
@@ -217,6 +217,19 @@ impl Parser {
             }
             self.expect(&TokenKind::RBrace)?;
             return Ok(TypeExpr::Record(fields, start.merge(self.prev_span())));
+        }
+
+        // List type: [T]
+        if self.check(&TokenKind::LBracket) {
+            self.advance();
+            let elem_type = self.parse_type()?;
+            self.expect(&TokenKind::RBracket)?;
+            // Return as Named("List", [elem_type])
+            return Ok(TypeExpr::Named(
+                "List".to_string(),
+                vec![elem_type],
+                start.merge(self.prev_span()),
+            ));
         }
 
         // Named type: Int, Option<T>
@@ -703,7 +716,15 @@ impl Parser {
                     self.advance();
                     return Ok(Expr::List(Vec::new(), None, start.merge(self.prev_span())));
                 }
-                let mut exprs = vec![self.parse_expr()?];
+                let first_expr = self.parse_expr()?;
+
+                // Check for list comprehension: [expr for pattern in source]
+                if self.check(&TokenKind::For) {
+                    return self.parse_list_comp(first_expr, start);
+                }
+
+                // Regular list
+                let mut exprs = vec![first_expr];
                 while self.check(&TokenKind::Comma) {
                     self.advance();
                     if self.check(&TokenKind::RBracket) {
@@ -994,6 +1015,51 @@ impl Parser {
             Box::new(body),
             start.merge(self.prev_span()),
         ))
+    }
+
+    /// Parse a list comprehension after seeing `[expr for`
+    fn parse_list_comp(&mut self, expr: Expr, start: Span) -> ParseResult<Expr> {
+        let mut generators = Vec::new();
+        let mut filters = Vec::new();
+
+        // Parse generators: for pattern in source
+        while self.check(&TokenKind::For) {
+            self.advance();
+            let gen_start = self.current_span();
+            let pattern = self.parse_pattern()?;
+            self.expect(&TokenKind::In)?;
+            let source = self.parse_expr()?;
+            generators.push(Generator {
+                pattern,
+                source,
+                span: gen_start.merge(self.prev_span()),
+            });
+
+            // Allow comma between generators
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+
+        // Parse filters: if condition
+        while self.check(&TokenKind::If) {
+            self.advance();
+            filters.push(self.parse_expr()?);
+
+            // Allow comma between filters
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&TokenKind::RBracket)?;
+
+        Ok(Expr::ListComp {
+            expr: Box::new(expr),
+            generators,
+            filters,
+            span: start.merge(self.prev_span()),
+        })
     }
 
     fn parse_interpolated_parts(&mut self, parts: Vec<StringPart>) -> ParseResult<Vec<InterpolatedPart>> {

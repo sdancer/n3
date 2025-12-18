@@ -46,6 +46,8 @@ pub enum TokenKind {
     Send,
     Receive,
     After,    // after (for receive timeout)
+    For,      // for (list comprehension)
+    In,       // in (list comprehension)
     SelfKw,   // self
     Extern,
     Return,
@@ -105,6 +107,8 @@ impl TokenKind {
             "send" => Some(TokenKind::Send),
             "receive" => Some(TokenKind::Receive),
             "after" => Some(TokenKind::After),
+            "for" => Some(TokenKind::For),
+            "in" => Some(TokenKind::In),
             "self" => Some(TokenKind::SelfKw),
             "extern" => Some(TokenKind::Extern),
             "return" => Some(TokenKind::Return),

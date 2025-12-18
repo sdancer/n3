@@ -116,6 +116,14 @@ pub enum InterpolatedPart {
     Expr(Box<Expr>),
 }
 
+/// Generator in a list comprehension: pattern <- source
+#[derive(Debug, Clone)]
+pub struct Generator {
+    pub pattern: Pattern,
+    pub source: Expr,
+    pub span: Span,
+}
+
 /// Expressions
 #[derive(Debug, Clone)]
 pub enum Expr {
@@ -134,6 +142,12 @@ pub enum Expr {
     // Compound literals
     Tuple(Vec<Expr>, Span),
     List(Vec<Expr>, Option<Box<Expr>>, Span), // [a, b | tail]
+    ListComp {
+        expr: Box<Expr>,                    // the expression to evaluate
+        generators: Vec<Generator>,          // for x in list, y in list2
+        filters: Vec<Expr>,                  // if conditions
+        span: Span,
+    },
     Record(Vec<(Ident, Expr)>, Span),
 
     // Operations
@@ -181,6 +195,7 @@ impl Expr {
             Expr::Var(_, s) => *s,
             Expr::Tuple(_, s) => *s,
             Expr::List(_, _, s) => *s,
+            Expr::ListComp { span, .. } => *span,
             Expr::Record(_, s) => *s,
             Expr::Binary(_, _, _, s) => *s,
             Expr::Unary(_, _, s) => *s,

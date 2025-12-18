@@ -164,6 +164,10 @@ impl Translator {
                 })
             }
 
+            Expr::ListComp { expr, generators, filters, .. } => {
+                self.translate_list_comp(expr, generators, filters)
+            }
+
             Expr::Binary(left, op, right, _) => {
                 let l = self.translate_expr(left);
                 let r = self.translate_expr(right);
@@ -570,6 +574,132 @@ impl Translator {
             CoreExpr::Lit(CoreLit::Nil),
             |acc, e| CoreExpr::Cons(Box::new(e), Box::new(acc)),
         )
+    }
+
+    /// Translate a list comprehension to Core Erlang
+    /// [expr for x in list if cond] becomes:
+    /// lists:filtermap(fun(X) -> case Cond of true -> {true, Expr}; false -> false end end, List)
+    fn translate_list_comp(
+        &mut self,
+        expr: &Expr,
+        generators: &[crate::syntax::ast::Generator],
+        filters: &[Expr],
+    ) -> CoreExpr {
+        // For simplicity, handle single generator case with lists:filtermap
+        // Multiple generators use nested flatmap
+
+        if generators.is_empty() {
+            // No generators - just return a list with the expr
+            return CoreExpr::Cons(
+                Box::new(self.translate_expr(expr)),
+                Box::new(CoreExpr::Lit(CoreLit::Nil)),
+            );
+        }
+
+        // Build from innermost generator outward
+        self.translate_list_comp_inner(expr, generators, filters, 0, false)
+    }
+
+    fn translate_list_comp_inner(
+        &mut self,
+        expr: &Expr,
+        generators: &[crate::syntax::ast::Generator],
+        filters: &[Expr],
+        gen_idx: usize,
+        use_map: bool, // true if we can use map (single generator, no filters)
+    ) -> CoreExpr {
+        if gen_idx >= generators.len() {
+            // All generators processed - apply filters and return expr
+            let translated_expr = self.translate_expr(expr);
+
+            if filters.is_empty() {
+                if use_map {
+                    // Just return the expression directly (used with lists:map)
+                    translated_expr
+                } else {
+                    // Return expression in a singleton list (used with lists:flatmap)
+                    CoreExpr::Cons(
+                        Box::new(translated_expr),
+                        Box::new(CoreExpr::Lit(CoreLit::Nil)),
+                    )
+                }
+            } else {
+                // Build combined filter condition
+                let mut combined_filter = self.translate_expr(&filters[0]);
+                for filter in &filters[1..] {
+                    let f = self.translate_expr(filter);
+                    combined_filter = CoreExpr::Call(
+                        "erlang".into(),
+                        "and".into(),
+                        vec![combined_filter, f],
+                    );
+                }
+
+                // case Filter of true -> [Expr]; false -> [] end
+                CoreExpr::Case(
+                    Box::new(combined_filter),
+                    vec![
+                        CoreClause {
+                            patterns: vec![CorePattern::Lit(CoreLit::Atom("true".into()))],
+                            guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                            body: CoreExpr::Cons(
+                                Box::new(translated_expr),
+                                Box::new(CoreExpr::Lit(CoreLit::Nil)),
+                            ),
+                        },
+                        CoreClause {
+                            patterns: vec![CorePattern::Lit(CoreLit::Atom("false".into()))],
+                            guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                            body: CoreExpr::Lit(CoreLit::Nil),
+                        },
+                    ],
+                )
+            }
+        } else {
+            // Process this generator
+            let generator = &generators[gen_idx];
+            let source = self.translate_expr(&generator.source);
+            let pattern = self.translate_pattern(&generator.pattern);
+
+            // Check if this is the simple case: single generator, single variable pattern, no filters
+            let is_simple_map = generators.len() == 1
+                && filters.is_empty()
+                && matches!(&generator.pattern, Pattern::Var(_, _));
+
+            // Recurse for inner generators
+            let inner = self.translate_list_comp_inner(expr, generators, filters, gen_idx + 1, is_simple_map);
+
+            if is_simple_map {
+                // Simple case: [expr for x in list] -> lists:map(fun(X) -> Expr end, List)
+                let param_var = self.to_core_var(match &generator.pattern {
+                    Pattern::Var(name, _) => name,
+                    _ => unreachable!(),
+                });
+                let lambda = CoreExpr::Fun(vec![param_var], Box::new(inner));
+                CoreExpr::Call("lists".into(), "map".into(), vec![lambda, source])
+            } else {
+                // Complex case: use flatmap with pattern matching
+                let param_var = self.fresh_var();
+                let lambda_body = CoreExpr::Case(
+                    Box::new(CoreExpr::Var(param_var.clone())),
+                    vec![
+                        CoreClause {
+                            patterns: vec![pattern],
+                            guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                            body: inner,
+                        },
+                        // Default case for non-matching patterns (skip)
+                        CoreClause {
+                            patterns: vec![CorePattern::Var("_".into())],
+                            guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                            body: CoreExpr::Lit(CoreLit::Nil),
+                        },
+                    ],
+                );
+                let lambda = CoreExpr::Fun(vec![param_var], Box::new(lambda_body));
+                CoreExpr::Call("lists".into(), "flatmap".into(), vec![lambda, source])
+            }
+        }
     }
 }
 

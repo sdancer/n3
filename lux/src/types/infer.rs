@@ -216,6 +216,30 @@ impl InferenceContext {
                 Ok(Type::List(Box::new(self.apply(&elem_type))))
             }
 
+            Expr::ListComp { expr, generators, filters, span } => {
+                let mut local_env = env.clone();
+
+                // Process generators - each binds variables
+                for generator in generators {
+                    let source_type = self.infer_expr(&local_env, &generator.source)?;
+                    // Expect source to be a list
+                    let elem_type = self.fresh_var();
+                    self.unify(&source_type, &Type::List(Box::new(elem_type.clone())), *span)?;
+                    // Bind pattern variables with the element type
+                    self.bind_pattern_vars(&mut local_env, &generator.pattern, &self.apply(&elem_type));
+                }
+
+                // Check filters are boolean
+                for filter in filters {
+                    let filter_type = self.infer_expr(&local_env, filter)?;
+                    self.unify(&filter_type, &Type::Bool, *span)?;
+                }
+
+                // Infer the expression type
+                let expr_type = self.infer_expr(&local_env, expr)?;
+                Ok(Type::List(Box::new(self.apply(&expr_type))))
+            }
+
             Expr::Binary(left, op, right, span) => {
                 let left_type = self.infer_expr(env, left)?;
                 let right_type = self.infer_expr(env, right)?;
