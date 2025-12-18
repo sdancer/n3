@@ -1,4 +1,4 @@
-use crate::syntax::ast::{Generator, *};
+use crate::syntax::ast::{CatchArm, Generator, *};
 use crate::syntax::span::Span;
 use crate::syntax::token::{StringPart, Token, TokenKind};
 
@@ -762,6 +762,7 @@ impl Parser {
             }
             TokenKind::LBrace => self.parse_block_expr(),
             TokenKind::HashBrace => self.parse_map_expr(),
+            TokenKind::Try => self.parse_try_expr(),
             TokenKind::Pipe => self.parse_lambda(),
             TokenKind::Or => self.parse_empty_lambda(), // || for empty params
             _ => Err(self.error("Expected expression")),
@@ -1032,6 +1033,71 @@ impl Parser {
             Box::new(body),
             start.merge(self.prev_span()),
         ))
+    }
+
+    /// Parse a try expression: try { body } catch { pattern => handler }
+    fn parse_try_expr(&mut self) -> ParseResult<Expr> {
+        let start = self.current_span();
+        self.expect(&TokenKind::Try)?;
+
+        // Parse the try body as a block
+        let body = self.parse_block_expr()?;
+
+        // Expect catch keyword
+        self.expect(&TokenKind::Catch)?;
+
+        // Parse catch arms in braces
+        self.expect(&TokenKind::LBrace)?;
+
+        let mut catch_arms = Vec::new();
+        while !self.check(&TokenKind::RBrace) {
+            let arm_start = self.current_span();
+
+            // Check for class:pattern or just pattern
+            let (class, pattern) = if self.check(&TokenKind::Colon) {
+                // Just :atom as pattern
+                (None, self.parse_pattern()?)
+            } else {
+                // Could be class:pattern or just pattern
+                let first = self.parse_pattern()?;
+                if self.check(&TokenKind::Colon) {
+                    self.advance();
+                    // It was class:pattern
+                    let class_name = match &first {
+                        Pattern::Var(name, _) => name.clone(),
+                        _ => return Err(self.error("Expected exception class (error, throw, exit)")),
+                    };
+                    let pattern = self.parse_pattern()?;
+                    (Some(class_name), pattern)
+                } else {
+                    // Just pattern
+                    (None, first)
+                }
+            };
+
+            self.expect(&TokenKind::FatArrow)?;
+            let body = self.parse_expr()?;
+
+            catch_arms.push(CatchArm {
+                class,
+                pattern,
+                body,
+                span: arm_start.merge(self.prev_span()),
+            });
+
+            // Allow comma between arms
+            if self.check(&TokenKind::Comma) {
+                self.advance();
+            }
+        }
+
+        self.expect(&TokenKind::RBrace)?;
+
+        Ok(Expr::Try {
+            body: Box::new(body),
+            catch_arms,
+            span: start.merge(self.prev_span()),
+        })
     }
 
     /// Parse a map expression: %{key => value, ...}

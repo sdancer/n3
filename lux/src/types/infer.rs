@@ -446,6 +446,23 @@ impl InferenceContext {
                 }
             }
 
+            Expr::Try { body, catch_arms, span } => {
+                let body_type = self.infer_expr(env, body)?;
+
+                // Each catch arm should return the same type as body
+                for arm in catch_arms {
+                    // Bind the pattern variable
+                    let mut local_env = env.clone();
+                    let pattern_type = self.fresh_var();
+                    self.bind_pattern_vars(&mut local_env, &arm.pattern, &pattern_type);
+
+                    let arm_type = self.infer_expr(&local_env, &arm.body)?;
+                    self.unify(&body_type, &arm_type, *span)?;
+                }
+
+                Ok(self.apply(&body_type))
+            }
+
             // TODO: implement remaining expression types
             _ => Ok(self.fresh_var()),
         }

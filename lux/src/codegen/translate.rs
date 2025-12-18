@@ -397,6 +397,78 @@ impl Translator {
                 CoreExpr::Call("erlang".into(), "self".into(), vec![])
             }
 
+            Expr::Try { body, catch_arms, .. } => {
+                let translated_body = self.translate_expr(body);
+                let success_var = self.fresh_var();
+                let class_var = self.fresh_var();
+                let reason_var = self.fresh_var();
+                let stack_var = self.fresh_var();
+
+                // Build catch body: case on {class, reason} to match catch arms
+                let catch_body = if catch_arms.is_empty() {
+                    // No catch arms - re-raise
+                    CoreExpr::Primop(
+                        "raise".into(),
+                        vec![
+                            CoreExpr::Var(stack_var.clone()),
+                            CoreExpr::Var(reason_var.clone()),
+                        ],
+                    )
+                } else {
+                    // Build case expression for catch arms
+                    let scrutinee = CoreExpr::Tuple(vec![
+                        CoreExpr::Var(class_var.clone()),
+                        CoreExpr::Var(reason_var.clone()),
+                    ]);
+
+                    let mut clauses: Vec<CoreClause> = catch_arms
+                        .iter()
+                        .map(|arm| {
+                            let class_pattern = if let Some(ref class) = arm.class {
+                                CorePattern::Lit(CoreLit::Atom(class.clone()))
+                            } else {
+                                CorePattern::Var("_".into())
+                            };
+                            let reason_pattern = self.translate_pattern(&arm.pattern);
+                            CoreClause {
+                                patterns: vec![CorePattern::Tuple(vec![
+                                    class_pattern,
+                                    reason_pattern,
+                                ])],
+                                guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                body: self.translate_expr(&arm.body),
+                            }
+                        })
+                        .collect();
+
+                    // Add fallback clause that re-raises
+                    clauses.push(CoreClause {
+                        patterns: vec![CorePattern::Tuple(vec![
+                            CorePattern::Var("_Class".into()),
+                            CorePattern::Var("_Reason".into()),
+                        ])],
+                        guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                        body: CoreExpr::Primop(
+                            "raise".into(),
+                            vec![
+                                CoreExpr::Var(stack_var.clone()),
+                                CoreExpr::Var(reason_var.clone()),
+                            ],
+                        ),
+                    });
+
+                    CoreExpr::Case(Box::new(scrutinee), clauses)
+                };
+
+                CoreExpr::Try {
+                    body: Box::new(translated_body),
+                    vars: vec![success_var.clone()],
+                    handler: Box::new(CoreExpr::Var(success_var)),
+                    evars: vec![class_var, reason_var, stack_var],
+                    catch: Box::new(catch_body),
+                }
+            }
+
             Expr::Return(expr, _) => {
                 expr.as_ref()
                     .map(|e| self.translate_expr(e))

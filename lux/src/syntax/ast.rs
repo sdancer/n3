@@ -182,6 +182,22 @@ pub enum Expr {
 
     // Return
     Return(Option<Box<Expr>>, Span),
+
+    // Try/Catch
+    Try {
+        body: Box<Expr>,
+        catch_arms: Vec<CatchArm>,
+        span: Span,
+    },
+}
+
+/// A catch clause: class:pattern => body
+#[derive(Debug, Clone)]
+pub struct CatchArm {
+    pub class: Option<Ident>,  // error, throw, exit (or None for any)
+    pub pattern: Pattern,
+    pub body: Expr,
+    pub span: Span,
 }
 
 impl Expr {
@@ -216,6 +232,7 @@ impl Expr {
             Expr::Receive { span, .. } => *span,
             Expr::SelfPid(s) => *s,
             Expr::Return(_, s) => *s,
+            Expr::Try { span, .. } => *span,
         }
     }
 }
