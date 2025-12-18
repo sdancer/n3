@@ -1,0 +1,352 @@
+use crate::syntax::span::Span;
+use crate::syntax::token::{Token, TokenKind};
+
+pub struct Lexer<'a> {
+    source: &'a str,
+    chars: std::iter::Peekable<std::str::CharIndices<'a>>,
+    pos: usize,
+}
+
+impl<'a> Lexer<'a> {
+    pub fn new(source: &'a str) -> Self {
+        Lexer {
+            source,
+            chars: source.char_indices().peekable(),
+            pos: 0,
+        }
+    }
+
+    pub fn tokenize(mut self) -> Vec<Token> {
+        let mut tokens = Vec::new();
+        loop {
+            let tok = self.next_token();
+            let is_eof = tok.kind == TokenKind::Eof;
+            tokens.push(tok);
+            if is_eof {
+                break;
+            }
+        }
+        tokens
+    }
+
+    fn next_token(&mut self) -> Token {
+        self.skip_whitespace_and_comments();
+
+        let start = self.pos;
+
+        let Some((_, ch)) = self.advance() else {
+            return Token::new(TokenKind::Eof, Span::new(start as u32, start as u32));
+        };
+
+        let kind = match ch {
+            // Single-char tokens
+            '(' => TokenKind::LParen,
+            ')' => TokenKind::RParen,
+            '{' => TokenKind::LBrace,
+            '}' => TokenKind::RBrace,
+            '[' => TokenKind::LBracket,
+            ']' => TokenKind::RBracket,
+            ',' => TokenKind::Comma,
+            ';' => TokenKind::Semi,
+            '.' => TokenKind::Dot,
+            '+' => TokenKind::Plus,
+            '*' => TokenKind::Star,
+            '%' => TokenKind::Percent,
+
+            // Multi-char operators
+            '-' => {
+                if self.peek_char() == Some('>') {
+                    self.advance();
+                    TokenKind::Arrow
+                } else {
+                    TokenKind::Minus
+                }
+            }
+            '=' => {
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::EqEq
+                } else if self.peek_char() == Some('>') {
+                    self.advance();
+                    TokenKind::FatArrow
+                } else {
+                    TokenKind::Eq
+                }
+            }
+            '!' => {
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::NotEq
+                } else {
+                    TokenKind::Not
+                }
+            }
+            '<' => {
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::LtEq
+                } else {
+                    TokenKind::Lt
+                }
+            }
+            '>' => {
+                if self.peek_char() == Some('=') {
+                    self.advance();
+                    TokenKind::GtEq
+                } else {
+                    TokenKind::Gt
+                }
+            }
+            '&' => {
+                if self.peek_char() == Some('&') {
+                    self.advance();
+                    TokenKind::And
+                } else {
+                    TokenKind::Error("Expected &&".into())
+                }
+            }
+            '|' => {
+                if self.peek_char() == Some('|') {
+                    self.advance();
+                    TokenKind::Or
+                } else {
+                    TokenKind::Pipe
+                }
+            }
+            ':' => {
+                if self.peek_char() == Some(':') {
+                    self.advance();
+                    TokenKind::Colon2
+                } else if self.peek_char().map(|c| c.is_alphabetic()).unwrap_or(false) {
+                    // Atom literal :name
+                    self.atom()
+                } else {
+                    TokenKind::Colon
+                }
+            }
+            '/' => {
+                // Comments handled in skip_whitespace_and_comments
+                TokenKind::Slash
+            }
+
+            // String literal
+            '"' => self.string(),
+
+            // Number
+            '0'..='9' => self.number(ch),
+
+            // Identifier or keyword
+            'a'..='z' | '_' => self.identifier(start),
+            'A'..='Z' => self.type_identifier(start),
+
+            _ => TokenKind::Error(format!("Unexpected character: {}", ch)),
+        };
+
+        Token::new(kind, Span::new(start as u32, self.pos as u32))
+    }
+
+    fn advance(&mut self) -> Option<(usize, char)> {
+        let next = self.chars.next();
+        if let Some((pos, _)) = self.chars.peek() {
+            self.pos = *pos;
+        } else {
+            self.pos = self.source.len();
+        }
+        next
+    }
+
+    fn peek_char(&mut self) -> Option<char> {
+        self.chars.peek().map(|(_, ch)| *ch)
+    }
+
+    fn skip_whitespace_and_comments(&mut self) {
+        loop {
+            match self.peek_char() {
+                Some(' ' | '\t' | '\n' | '\r') => {
+                    self.advance();
+                }
+                Some('/') => {
+                    // Look ahead for //
+                    let mut temp = self.chars.clone();
+                    temp.next(); // consume /
+                    if temp.peek().map(|(_, c)| *c) == Some('/') {
+                        // Line comment
+                        self.advance(); // /
+                        self.advance(); // /
+                        while let Some(ch) = self.peek_char() {
+                            if ch == '\n' {
+                                break;
+                            }
+                            self.advance();
+                        }
+                    } else {
+                        break;
+                    }
+                }
+                _ => break,
+            }
+        }
+    }
+
+    fn identifier(&mut self, start: usize) -> TokenKind {
+        while let Some(ch) = self.peek_char() {
+            if ch.is_alphanumeric() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let text = &self.source[start..self.pos];
+        TokenKind::keyword(text).unwrap_or_else(|| TokenKind::Ident(text.to_string()))
+    }
+
+    fn type_identifier(&mut self, start: usize) -> TokenKind {
+        while let Some(ch) = self.peek_char() {
+            if ch.is_alphanumeric() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let text = &self.source[start..self.pos];
+        TokenKind::TypeIdent(text.to_string())
+    }
+
+    fn atom(&mut self) -> TokenKind {
+        let start = self.pos;
+        while let Some(ch) = self.peek_char() {
+            if ch.is_alphanumeric() || ch == '_' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+        let text = &self.source[start..self.pos];
+        TokenKind::Atom(text.to_string())
+    }
+
+    fn string(&mut self) -> TokenKind {
+        let mut value = String::new();
+        loop {
+            match self.advance() {
+                Some((_, '"')) => break,
+                Some((_, '\\')) => {
+                    match self.advance() {
+                        Some((_, 'n')) => value.push('\n'),
+                        Some((_, 't')) => value.push('\t'),
+                        Some((_, 'r')) => value.push('\r'),
+                        Some((_, '\\')) => value.push('\\'),
+                        Some((_, '"')) => value.push('"'),
+                        Some((_, ch)) => {
+                            return TokenKind::Error(format!("Invalid escape: \\{}", ch))
+                        }
+                        None => return TokenKind::Error("Unterminated string".into()),
+                    }
+                }
+                Some((_, ch)) => value.push(ch),
+                None => return TokenKind::Error("Unterminated string".into()),
+            }
+        }
+        TokenKind::String(value)
+    }
+
+    fn number(&mut self, first: char) -> TokenKind {
+        let mut num_str = first.to_string();
+        let mut is_float = false;
+
+        while let Some(ch) = self.peek_char() {
+            if ch.is_ascii_digit() {
+                num_str.push(ch);
+                self.advance();
+            } else if ch == '.' && !is_float {
+                // Look ahead to ensure it's a decimal, not a method call
+                let mut temp = self.chars.clone();
+                temp.next();
+                if temp.peek().map(|(_, c)| c.is_ascii_digit()).unwrap_or(false) {
+                    is_float = true;
+                    num_str.push(ch);
+                    self.advance();
+                } else {
+                    break;
+                }
+            } else if ch == '_' {
+                // Allow underscores in numbers: 1_000_000
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        if is_float {
+            match num_str.parse::<f64>() {
+                Ok(f) => TokenKind::Float(f),
+                Err(e) => TokenKind::Error(format!("Invalid float: {}", e)),
+            }
+        } else {
+            match num_str.parse::<i64>() {
+                Ok(n) => TokenKind::Int(n),
+                Err(e) => TokenKind::Error(format!("Invalid integer: {}", e)),
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_basic_tokens() {
+        let tokens = Lexer::new("fn main() { }").tokenize();
+        assert_eq!(tokens[0].kind, TokenKind::Fn);
+        assert_eq!(tokens[1].kind, TokenKind::Ident("main".into()));
+        assert_eq!(tokens[2].kind, TokenKind::LParen);
+        assert_eq!(tokens[3].kind, TokenKind::RParen);
+        assert_eq!(tokens[4].kind, TokenKind::LBrace);
+        assert_eq!(tokens[5].kind, TokenKind::RBrace);
+        assert_eq!(tokens[6].kind, TokenKind::Eof);
+    }
+
+    #[test]
+    fn test_atoms() {
+        let tokens = Lexer::new(":ok :error").tokenize();
+        assert_eq!(tokens[0].kind, TokenKind::Atom("ok".into()));
+        assert_eq!(tokens[1].kind, TokenKind::Atom("error".into()));
+    }
+
+    #[test]
+    fn test_numbers() {
+        let tokens = Lexer::new("42 3.14 1_000").tokenize();
+        assert_eq!(tokens[0].kind, TokenKind::Int(42));
+        assert_eq!(tokens[1].kind, TokenKind::Float(3.14));
+        assert_eq!(tokens[2].kind, TokenKind::Int(1000));
+    }
+
+    #[test]
+    fn test_strings() {
+        let tokens = Lexer::new(r#""hello" "world\n""#).tokenize();
+        assert_eq!(tokens[0].kind, TokenKind::String("hello".into()));
+        assert_eq!(tokens[1].kind, TokenKind::String("world\n".into()));
+    }
+
+    #[test]
+    fn test_operators() {
+        let tokens = Lexer::new("-> => == != <= >= && || ::").tokenize();
+        assert_eq!(tokens[0].kind, TokenKind::Arrow);
+        assert_eq!(tokens[1].kind, TokenKind::FatArrow);
+        assert_eq!(tokens[2].kind, TokenKind::EqEq);
+        assert_eq!(tokens[3].kind, TokenKind::NotEq);
+        assert_eq!(tokens[4].kind, TokenKind::LtEq);
+        assert_eq!(tokens[5].kind, TokenKind::GtEq);
+        assert_eq!(tokens[6].kind, TokenKind::And);
+        assert_eq!(tokens[7].kind, TokenKind::Or);
+        assert_eq!(tokens[8].kind, TokenKind::Colon2);
+    }
+
+    #[test]
+    fn test_comments() {
+        let tokens = Lexer::new("fn // comment\nmain").tokenize();
+        assert_eq!(tokens[0].kind, TokenKind::Fn);
+        assert_eq!(tokens[1].kind, TokenKind::Ident("main".into()));
+    }
+}
