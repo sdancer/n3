@@ -413,6 +413,29 @@ impl Translator {
                         } else if name == "div" && arg_exprs.len() == 2 {
                             // div(a, b) -> erlang:div(a, b) (integer division)
                             CoreExpr::Call("erlang".to_string(), "div".to_string(), arg_exprs)
+                        } else if name == "is_int" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_integer".to_string(), arg_exprs)
+                        } else if name == "is_float" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_float".to_string(), arg_exprs)
+                        } else if name == "is_number" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_number".to_string(), arg_exprs)
+                        } else if name == "is_atom" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_atom".to_string(), arg_exprs)
+                        } else if name == "is_list" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_list".to_string(), arg_exprs)
+                        } else if name == "is_tuple" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_tuple".to_string(), arg_exprs)
+                        } else if name == "is_map" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_map".to_string(), arg_exprs)
+                        } else if name == "is_bool" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_boolean".to_string(), arg_exprs)
+                        } else if name == "is_string" && arg_exprs.len() == 1 {
+                            // In Erlang, strings are lists of integers
+                            CoreExpr::Call("erlang".to_string(), "is_list".to_string(), arg_exprs)
+                        } else if name == "is_pid" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_pid".to_string(), arg_exprs)
+                        } else if name == "is_function" && arg_exprs.len() == 1 {
+                            CoreExpr::Call("erlang".to_string(), "is_function".to_string(), arg_exprs)
                         } else if self.lookup_function(name).is_some() {
                             // Local function call - use apply with local fun reference
                             CoreExpr::Apply(
