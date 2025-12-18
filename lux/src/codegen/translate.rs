@@ -727,6 +727,22 @@ impl Translator {
                         } else if name == "erase" && arg_exprs.len() == 1 {
                             // erase(key) -> erlang:erase(key)
                             CoreExpr::Call("erlang".to_string(), "erase".to_string(), arg_exprs)
+                        } else if name == "elem" && arg_exprs.len() == 2 {
+                            // elem(tuple, index) -> erlang:element(index, tuple) (1-based)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("erlang".to_string(), "element".to_string(),
+                                vec![args[1].clone(), args[0].clone()])
+                        } else if name == "set_elem" && arg_exprs.len() == 3 {
+                            // set_elem(tuple, index, value) -> erlang:setelement(index, tuple, value)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("erlang".to_string(), "setelement".to_string(),
+                                vec![args[1].clone(), args[0].clone(), args[2].clone()])
+                        } else if name == "tuple_to_list" && arg_exprs.len() == 1 {
+                            // tuple_to_list(tuple) -> erlang:tuple_to_list(tuple)
+                            CoreExpr::Call("erlang".to_string(), "tuple_to_list".to_string(), arg_exprs)
+                        } else if name == "list_to_tuple" && arg_exprs.len() == 1 {
+                            // list_to_tuple(list) -> erlang:list_to_tuple(list)
+                            CoreExpr::Call("erlang".to_string(), "list_to_tuple".to_string(), arg_exprs)
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
@@ -1103,6 +1119,7 @@ impl Translator {
             Pattern::Var(name, _) => CorePattern::Var(self.to_core_var(name)),
             Pattern::Int(n, _) => CorePattern::Lit(CoreLit::Int(*n)),
             Pattern::Float(f, _) => CorePattern::Lit(CoreLit::Float(*f)),
+            Pattern::Char(c, _) => CorePattern::Lit(CoreLit::Int(*c as i64)),
             Pattern::String(s, _) => CorePattern::Lit(CoreLit::String(s.clone())),
             Pattern::Bool(b, _) => {
                 CorePattern::Lit(CoreLit::Atom(if *b { "true" } else { "false" }.into()))
