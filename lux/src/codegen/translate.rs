@@ -389,6 +389,30 @@ impl Translator {
                         } else if name == "error" && arg_exprs.len() == 1 {
                             // error(reason) -> erlang:error(reason)
                             CoreExpr::Call("erlang".to_string(), "error".to_string(), arg_exprs)
+                        } else if name == "band" && arg_exprs.len() == 2 {
+                            // band(a, b) -> erlang:band(a, b)
+                            CoreExpr::Call("erlang".to_string(), "band".to_string(), arg_exprs)
+                        } else if name == "bor" && arg_exprs.len() == 2 {
+                            // bor(a, b) -> erlang:bor(a, b)
+                            CoreExpr::Call("erlang".to_string(), "bor".to_string(), arg_exprs)
+                        } else if name == "bxor" && arg_exprs.len() == 2 {
+                            // bxor(a, b) -> erlang:bxor(a, b)
+                            CoreExpr::Call("erlang".to_string(), "bxor".to_string(), arg_exprs)
+                        } else if name == "bnot" && arg_exprs.len() == 1 {
+                            // bnot(x) -> erlang:bnot(x)
+                            CoreExpr::Call("erlang".to_string(), "bnot".to_string(), arg_exprs)
+                        } else if name == "bsl" && arg_exprs.len() == 2 {
+                            // bsl(n, shift) -> erlang:bsl(n, shift)
+                            CoreExpr::Call("erlang".to_string(), "bsl".to_string(), arg_exprs)
+                        } else if name == "bsr" && arg_exprs.len() == 2 {
+                            // bsr(n, shift) -> erlang:bsr(n, shift)
+                            CoreExpr::Call("erlang".to_string(), "bsr".to_string(), arg_exprs)
+                        } else if name == "rem" && arg_exprs.len() == 2 {
+                            // rem(a, b) -> erlang:rem(a, b) (alternative to %)
+                            CoreExpr::Call("erlang".to_string(), "rem".to_string(), arg_exprs)
+                        } else if name == "div" && arg_exprs.len() == 2 {
+                            // div(a, b) -> erlang:div(a, b) (integer division)
+                            CoreExpr::Call("erlang".to_string(), "div".to_string(), arg_exprs)
                         } else if self.lookup_function(name).is_some() {
                             // Local function call - use apply with local fun reference
                             CoreExpr::Apply(
