@@ -454,7 +454,7 @@ impl Parser {
     }
 
     fn parse_comparison_expr(&mut self) -> ParseResult<Expr> {
-        let mut left = self.parse_additive_expr()?;
+        let mut left = self.parse_range_expr()?;
         loop {
             let op = match self.peek() {
                 TokenKind::Lt => BinOp::Lt,
@@ -464,11 +464,26 @@ impl Parser {
                 _ => break,
             };
             self.advance();
-            let right = self.parse_additive_expr()?;
+            let right = self.parse_range_expr()?;
             let span = left.span().merge(right.span());
             left = Expr::Binary(Box::new(left), op, Box::new(right), span);
         }
         Ok(left)
+    }
+
+    fn parse_range_expr(&mut self) -> ParseResult<Expr> {
+        let left = self.parse_additive_expr()?;
+
+        // Check for range operators
+        let inclusive = match self.peek() {
+            TokenKind::DotDot => false,
+            TokenKind::DotDotEq => true,
+            _ => return Ok(left),
+        };
+        self.advance();
+        let right = self.parse_additive_expr()?;
+        let span = left.span().merge(right.span());
+        Ok(Expr::Range(Box::new(left), Box::new(right), inclusive, span))
     }
 
     fn parse_additive_expr(&mut self) -> ParseResult<Expr> {

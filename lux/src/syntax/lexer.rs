@@ -53,7 +53,19 @@ impl<'a> Lexer<'a> {
             ']' => TokenKind::RBracket,
             ',' => TokenKind::Comma,
             ';' => TokenKind::Semi,
-            '.' => TokenKind::Dot,
+            '.' => {
+                if self.peek_char() == Some('.') {
+                    self.advance();
+                    if self.peek_char() == Some('=') {
+                        self.advance();
+                        TokenKind::DotDotEq
+                    } else {
+                        TokenKind::DotDot
+                    }
+                } else {
+                    TokenKind::Dot
+                }
+            }
             '+' => {
                 if self.peek_char() == Some('+') {
                     self.advance();

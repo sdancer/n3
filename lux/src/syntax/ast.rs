@@ -148,6 +148,7 @@ pub enum Expr {
         filters: Vec<Expr>,                  // if conditions
         span: Span,
     },
+    Range(Box<Expr>, Box<Expr>, bool, Span), // start..end or start..=end (bool is inclusive)
     Record(Vec<(Ident, Expr)>, Span),
 
     // Operations
@@ -196,6 +197,7 @@ impl Expr {
             Expr::Tuple(_, s) => *s,
             Expr::List(_, _, s) => *s,
             Expr::ListComp { span, .. } => *span,
+            Expr::Range(_, _, _, s) => *s,
             Expr::Record(_, s) => *s,
             Expr::Binary(_, _, _, s) => *s,
             Expr::Unary(_, _, s) => *s,

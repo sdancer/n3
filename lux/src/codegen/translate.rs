@@ -164,6 +164,24 @@ impl Translator {
                 })
             }
 
+            Expr::Range(start, end, inclusive, _) => {
+                let start_expr = self.translate_expr(start);
+                let end_expr = if *inclusive {
+                    self.translate_expr(end)
+                } else {
+                    // For exclusive range, end - 1
+                    CoreExpr::Call(
+                        "erlang".into(),
+                        "-".into(),
+                        vec![
+                            self.translate_expr(end),
+                            CoreExpr::Lit(CoreLit::Int(1)),
+                        ],
+                    )
+                };
+                CoreExpr::Call("lists".into(), "seq".into(), vec![start_expr, end_expr])
+            }
+
             Expr::ListComp { expr, generators, filters, .. } => {
                 self.translate_list_comp(expr, generators, filters)
             }

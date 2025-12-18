@@ -216,6 +216,14 @@ impl InferenceContext {
                 Ok(Type::List(Box::new(self.apply(&elem_type))))
             }
 
+            Expr::Range(start, end, _inclusive, span) => {
+                let start_type = self.infer_expr(env, start)?;
+                let end_type = self.infer_expr(env, end)?;
+                self.unify(&start_type, &Type::Int, *span)?;
+                self.unify(&end_type, &Type::Int, *span)?;
+                Ok(Type::List(Box::new(Type::Int)))
+            }
+
             Expr::ListComp { expr, generators, filters, span } => {
                 let mut local_env = env.clone();
 

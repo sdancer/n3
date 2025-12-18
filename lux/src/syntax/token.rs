@@ -86,6 +86,8 @@ pub enum TokenKind {
     Colon,     // :
     Semi,      // ;
     Dot,       // .
+    DotDot,    // .. (range exclusive)
+    DotDotEq,  // ..= (range inclusive)
 
     // Special
     Eof,
