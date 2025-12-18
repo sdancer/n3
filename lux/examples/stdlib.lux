@@ -29,4 +29,13 @@ fn main() -> () {
 
     // flatten
     print(flatten([[1, 2], [3, 4], [5]]))
+
+    // tuple helpers
+    let pair = (42, "hello")
+    print(fst(pair))
+    print(snd(pair))
+    print(size(pair))
+
+    // conversion
+    print(to_string(123))
 }

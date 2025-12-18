@@ -335,6 +335,44 @@ impl Translator {
                         } else if name == "flatten" && arg_exprs.len() == 1 {
                             // flatten(list) -> lists:flatten(list)
                             CoreExpr::Call("lists".to_string(), "flatten".to_string(), arg_exprs)
+                        } else if name == "to_string" && arg_exprs.len() == 1 {
+                            // to_string(x) -> io_lib:format("~p", [x]) |> lists:flatten
+                            let format_str = CoreExpr::Lit(CoreLit::String("~p".to_string()));
+                            let args_list = CoreExpr::Cons(
+                                Box::new(arg_exprs.into_iter().next().unwrap()),
+                                Box::new(CoreExpr::Lit(CoreLit::Nil))
+                            );
+                            let io_list = CoreExpr::Call("io_lib".to_string(), "format".to_string(), vec![format_str, args_list]);
+                            CoreExpr::Call("lists".to_string(), "flatten".to_string(), vec![io_list])
+                        } else if name == "to_int" && arg_exprs.len() == 1 {
+                            // to_int(string) -> list_to_integer(string)
+                            CoreExpr::Call("erlang".to_string(), "list_to_integer".to_string(), arg_exprs)
+                        } else if name == "to_float" && arg_exprs.len() == 1 {
+                            // to_float(string) -> list_to_float(string)
+                            CoreExpr::Call("erlang".to_string(), "list_to_float".to_string(), arg_exprs)
+                        } else if name == "to_atom" && arg_exprs.len() == 1 {
+                            // to_atom(string) -> list_to_atom(string)
+                            CoreExpr::Call("erlang".to_string(), "list_to_atom".to_string(), arg_exprs)
+                        } else if name == "fst" && arg_exprs.len() == 1 {
+                            // fst(tuple) -> element(1, tuple)
+                            CoreExpr::Call("erlang".to_string(), "element".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Int(1)), arg_exprs.into_iter().next().unwrap()])
+                        } else if name == "snd" && arg_exprs.len() == 1 {
+                            // snd(tuple) -> element(2, tuple)
+                            CoreExpr::Call("erlang".to_string(), "element".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Int(2)), arg_exprs.into_iter().next().unwrap()])
+                        } else if name == "size" && arg_exprs.len() == 1 {
+                            // size(tuple) -> tuple_size(tuple)
+                            CoreExpr::Call("erlang".to_string(), "tuple_size".to_string(), arg_exprs)
+                        } else if name == "throw" && arg_exprs.len() == 1 {
+                            // throw(term) -> erlang:throw(term)
+                            CoreExpr::Call("erlang".to_string(), "throw".to_string(), arg_exprs)
+                        } else if name == "exit" && arg_exprs.len() == 1 {
+                            // exit(reason) -> erlang:exit(reason)
+                            CoreExpr::Call("erlang".to_string(), "exit".to_string(), arg_exprs)
+                        } else if name == "error" && arg_exprs.len() == 1 {
+                            // error(reason) -> erlang:error(reason)
+                            CoreExpr::Call("erlang".to_string(), "error".to_string(), arg_exprs)
                         } else if self.lookup_function(name).is_some() {
                             // Local function call - use apply with local fun reference
                             CoreExpr::Apply(
