@@ -516,6 +516,55 @@ impl Translator {
                                     Box::new(CoreExpr::Var(tmp))
                                 ))
                             )
+                        } else if name == "sleep" && arg_exprs.len() == 1 {
+                            // sleep(ms) -> timer:sleep(ms)
+                            CoreExpr::Call("timer".to_string(), "sleep".to_string(), arg_exprs)
+                        } else if name == "now" && arg_exprs.is_empty() {
+                            // now() -> erlang:system_time(millisecond)
+                            CoreExpr::Call("erlang".to_string(), "system_time".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("millisecond".into()))])
+                        } else if name == "monotonic_time" && arg_exprs.is_empty() {
+                            // monotonic_time() -> erlang:monotonic_time(millisecond)
+                            CoreExpr::Call("erlang".to_string(), "monotonic_time".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("millisecond".into()))])
+                        } else if name == "random" && arg_exprs.is_empty() {
+                            // random() -> rand:uniform()
+                            CoreExpr::Call("rand".to_string(), "uniform".to_string(), vec![])
+                        } else if name == "random" && arg_exprs.len() == 1 {
+                            // random(n) -> rand:uniform(n)
+                            CoreExpr::Call("rand".to_string(), "uniform".to_string(), arg_exprs)
+                        } else if name == "random_seed" && arg_exprs.is_empty() {
+                            // random_seed() -> rand:seed(exsss)
+                            CoreExpr::Call("rand".to_string(), "seed".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("exsss".into()))])
+                        } else if name == "spawn_link" && arg_exprs.len() == 1 {
+                            // spawn_link(fun) -> erlang:spawn_link(fun)
+                            CoreExpr::Call("erlang".to_string(), "spawn_link".to_string(), arg_exprs)
+                        } else if name == "link" && arg_exprs.len() == 1 {
+                            // link(pid) -> erlang:link(pid)
+                            CoreExpr::Call("erlang".to_string(), "link".to_string(), arg_exprs)
+                        } else if name == "unlink" && arg_exprs.len() == 1 {
+                            // unlink(pid) -> erlang:unlink(pid)
+                            CoreExpr::Call("erlang".to_string(), "unlink".to_string(), arg_exprs)
+                        } else if name == "monitor" && arg_exprs.len() == 1 {
+                            // monitor(pid) -> erlang:monitor(process, pid)
+                            CoreExpr::Call("erlang".to_string(), "monitor".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("process".into())), arg_exprs.into_iter().next().unwrap()])
+                        } else if name == "demonitor" && arg_exprs.len() == 1 {
+                            // demonitor(ref) -> erlang:demonitor(ref)
+                            CoreExpr::Call("erlang".to_string(), "demonitor".to_string(), arg_exprs)
+                        } else if name == "registered" && arg_exprs.is_empty() {
+                            // registered() -> erlang:registered()
+                            CoreExpr::Call("erlang".to_string(), "registered".to_string(), vec![])
+                        } else if name == "register" && arg_exprs.len() == 2 {
+                            // register(name, pid) -> erlang:register(name, pid)
+                            CoreExpr::Call("erlang".to_string(), "register".to_string(), arg_exprs)
+                        } else if name == "whereis" && arg_exprs.len() == 1 {
+                            // whereis(name) -> erlang:whereis(name)
+                            CoreExpr::Call("erlang".to_string(), "whereis".to_string(), arg_exprs)
+                        } else if name == "make_ref" && arg_exprs.is_empty() {
+                            // make_ref() -> erlang:make_ref()
+                            CoreExpr::Call("erlang".to_string(), "make_ref".to_string(), vec![])
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
