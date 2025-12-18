@@ -631,6 +631,72 @@ impl Translator {
                         } else if name == "unique" && arg_exprs.len() == 1 {
                             // unique(list) -> lists:usort(list)
                             CoreExpr::Call("lists".to_string(), "usort".to_string(), arg_exprs)
+                        // Map functions
+                        } else if name == "map_put" && arg_exprs.len() == 3 {
+                            // map_put(map, key, value) -> maps:put(key, value, map)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("maps".to_string(), "put".to_string(),
+                                vec![args[1].clone(), args[2].clone(), args[0].clone()])
+                        } else if name == "map_get" && arg_exprs.len() == 2 {
+                            // map_get(map, key) -> maps:get(key, map)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("maps".to_string(), "get".to_string(),
+                                vec![args[1].clone(), args[0].clone()])
+                        } else if name == "map_get" && arg_exprs.len() == 3 {
+                            // map_get(map, key, default) -> maps:get(key, map, default)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("maps".to_string(), "get".to_string(),
+                                vec![args[1].clone(), args[0].clone(), args[2].clone()])
+                        } else if name == "map_remove" && arg_exprs.len() == 2 {
+                            // map_remove(map, key) -> maps:remove(key, map)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("maps".to_string(), "remove".to_string(),
+                                vec![args[1].clone(), args[0].clone()])
+                        } else if name == "map_keys" && arg_exprs.len() == 1 {
+                            // map_keys(map) -> maps:keys(map)
+                            CoreExpr::Call("maps".to_string(), "keys".to_string(), arg_exprs)
+                        } else if name == "map_values" && arg_exprs.len() == 1 {
+                            // map_values(map) -> maps:values(map)
+                            CoreExpr::Call("maps".to_string(), "values".to_string(), arg_exprs)
+                        } else if name == "map_has_key" && arg_exprs.len() == 2 {
+                            // map_has_key(map, key) -> maps:is_key(key, map)
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            CoreExpr::Call("maps".to_string(), "is_key".to_string(),
+                                vec![args[1].clone(), args[0].clone()])
+                        } else if name == "map_merge" && arg_exprs.len() == 2 {
+                            // map_merge(map1, map2) -> maps:merge(map1, map2)
+                            CoreExpr::Call("maps".to_string(), "merge".to_string(), arg_exprs)
+                        } else if name == "map_size" && arg_exprs.len() == 1 {
+                            // map_size(map) -> maps:size(map)
+                            CoreExpr::Call("maps".to_string(), "size".to_string(), arg_exprs)
+                        } else if name == "map_to_list" && arg_exprs.len() == 1 {
+                            // map_to_list(map) -> maps:to_list(map)
+                            CoreExpr::Call("maps".to_string(), "to_list".to_string(), arg_exprs)
+                        } else if name == "list_to_map" && arg_exprs.len() == 1 {
+                            // list_to_map(list) -> maps:from_list(list)
+                            CoreExpr::Call("maps".to_string(), "from_list".to_string(), arg_exprs)
+                        // File I/O functions
+                        } else if name == "file_read" && arg_exprs.len() == 1 {
+                            // file_read(path) -> file:read_file(path)
+                            CoreExpr::Call("file".to_string(), "read_file".to_string(), arg_exprs)
+                        } else if name == "file_write" && arg_exprs.len() == 2 {
+                            // file_write(path, content) -> file:write_file(path, content)
+                            CoreExpr::Call("file".to_string(), "write_file".to_string(), arg_exprs)
+                        } else if name == "file_exists" && arg_exprs.len() == 1 {
+                            // file_exists(path) -> filelib:is_file(path)
+                            CoreExpr::Call("filelib".to_string(), "is_file".to_string(), arg_exprs)
+                        } else if name == "file_delete" && arg_exprs.len() == 1 {
+                            // file_delete(path) -> file:delete(path)
+                            CoreExpr::Call("file".to_string(), "delete".to_string(), arg_exprs)
+                        } else if name == "dir_list" && arg_exprs.len() == 1 {
+                            // dir_list(path) -> file:list_dir(path)
+                            CoreExpr::Call("file".to_string(), "list_dir".to_string(), arg_exprs)
+                        } else if name == "dir_make" && arg_exprs.len() == 1 {
+                            // dir_make(path) -> file:make_dir(path)
+                            CoreExpr::Call("file".to_string(), "make_dir".to_string(), arg_exprs)
+                        } else if name == "get_cwd" && arg_exprs.is_empty() {
+                            // get_cwd() -> file:get_cwd()
+                            CoreExpr::Call("file".to_string(), "get_cwd".to_string(), vec![])
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
