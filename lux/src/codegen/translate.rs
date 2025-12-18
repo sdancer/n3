@@ -215,6 +215,22 @@ impl Translator {
                     ast::BinOp::Or => ("erlang", "or"),
                     ast::BinOp::Pipe => {
                         // x |> f becomes f(x)
+                        // If right side is a function name, use LocalFunRef or Call
+                        if let Expr::Var(name, _) = right.as_ref() {
+                            // Check if it's a built-in function
+                            if matches!(name.as_str(), "length" | "hd" | "tl" | "reverse" | "sort" | "flatten" | "abs") {
+                                let (module, func) = match name.as_str() {
+                                    "length" | "hd" | "tl" | "abs" => ("erlang", name.as_str()),
+                                    _ => ("lists", name.as_str()),
+                                };
+                                return CoreExpr::Call(module.into(), func.into(), vec![l]);
+                            } else if self.lookup_function(name).is_some() {
+                                return CoreExpr::Apply(
+                                    Box::new(CoreExpr::LocalFunRef(name.clone(), 1)),
+                                    vec![l]
+                                );
+                            }
+                        }
                         return CoreExpr::Apply(Box::new(r), vec![l]);
                     }
                 };

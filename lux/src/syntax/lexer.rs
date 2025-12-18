@@ -140,6 +140,9 @@ impl<'a> Lexer<'a> {
                 if self.peek_char() == Some('|') {
                     self.advance();
                     TokenKind::Or
+                } else if self.peek_char() == Some('>') {
+                    self.advance();
+                    TokenKind::PipeRight
                 } else {
                     TokenKind::Pipe
                 }

@@ -412,7 +412,19 @@ impl Parser {
     }
 
     fn parse_expr(&mut self) -> ParseResult<Expr> {
-        self.parse_or_expr()
+        self.parse_pipe_expr()
+    }
+
+    fn parse_pipe_expr(&mut self) -> ParseResult<Expr> {
+        let mut expr = self.parse_or_expr()?;
+        while self.check(&TokenKind::PipeRight) {
+            let start = expr.span();
+            self.advance();
+            let right = self.parse_or_expr()?;
+            let span = start.merge(right.span());
+            expr = Expr::Binary(Box::new(expr), BinOp::Pipe, Box::new(right), span);
+        }
+        Ok(expr)
     }
 
     fn parse_or_expr(&mut self) -> ParseResult<Expr> {

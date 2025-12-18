@@ -75,6 +75,7 @@ pub enum TokenKind {
     Arrow,     // ->
     FatArrow,  // =>
     Pipe,      // |
+    PipeRight, // |>
     HashBrace, // %{ (map literal start)
     Colon2,    // ::
 
