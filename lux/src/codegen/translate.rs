@@ -79,6 +79,10 @@ impl Translator {
                 Item::Extern(_) => {
                     // External declarations don't generate code
                 }
+                Item::Use(_) => {
+                    // Use declarations are resolved at compile time
+                    // They inform function resolution but don't generate code
+                }
             }
         }
 

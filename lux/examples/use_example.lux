@@ -1,0 +1,11 @@
+// Example of using another module
+mod use_example
+
+use math_lib
+
+fn main() -> () {
+    // Call functions from math_lib using module::function syntax
+    print(math_lib::square(4))
+    print(math_lib::cube(2))
+    print(math_lib::factorial(6))
+}

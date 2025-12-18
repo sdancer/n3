@@ -18,6 +18,15 @@ pub enum Item {
     Enum(EnumDef),
     Struct(StructDef),
     Extern(ExternBlock),
+    Use(UseDecl),
+}
+
+/// Use declaration: use module or use module::{item1, item2}
+#[derive(Debug, Clone)]
+pub struct UseDecl {
+    pub module: Ident,
+    pub items: Option<Vec<Ident>>, // None = import all, Some = specific items
+    pub span: Span,
 }
 
 /// Struct definition

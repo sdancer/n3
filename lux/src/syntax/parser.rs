@@ -69,7 +69,8 @@ impl Parser {
             TokenKind::Enum => self.parse_enum().map(Item::Enum),
             TokenKind::Struct => self.parse_struct().map(Item::Struct),
             TokenKind::Extern => self.parse_extern().map(Item::Extern),
-            _ => Err(self.error("Expected fn, type, enum, struct, or extern")),
+            TokenKind::Use => self.parse_use().map(Item::Use),
+            _ => Err(self.error("Expected fn, type, enum, struct, use, or extern")),
         }
     }
 
@@ -311,6 +312,38 @@ impl Parser {
             name,
             type_params,
             variants,
+            span: start.merge(self.prev_span()),
+        })
+    }
+
+    fn parse_use(&mut self) -> ParseResult<UseDecl> {
+        let start = self.current_span();
+        self.expect(&TokenKind::Use)?;
+
+        // Module name (can be lowercase or uppercase)
+        let module = self.expect_ident_or_type_ident()?;
+
+        // Optional: ::{item1, item2}
+        let items = if self.check(&TokenKind::Colon2) {
+            self.advance();
+            self.expect(&TokenKind::LBrace)?;
+            let mut items = Vec::new();
+            while !self.check(&TokenKind::RBrace) {
+                items.push(self.expect_ident_or_type_ident()?);
+                if !self.check(&TokenKind::Comma) {
+                    break;
+                }
+                self.advance();
+            }
+            self.expect(&TokenKind::RBrace)?;
+            Some(items)
+        } else {
+            None
+        };
+
+        Ok(UseDecl {
+            module,
+            items,
             span: start.merge(self.prev_span()),
         })
     }

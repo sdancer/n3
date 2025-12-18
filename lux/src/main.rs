@@ -97,6 +97,12 @@ fn main() {
                 lux::syntax::ast::Item::Extern(e) => {
                     println!("  extern \"{}\" ({} decls)", e.abi, e.decls.len());
                 }
+                lux::syntax::ast::Item::Use(u) => {
+                    match &u.items {
+                        Some(items) => println!("  use {}::{{{}}}", u.module, items.join(", ")),
+                        None => println!("  use {}", u.module),
+                    }
+                }
             }
         }
         return;
