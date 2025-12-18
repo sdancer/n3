@@ -475,7 +475,14 @@ impl Translator {
                     .unwrap_or(CoreExpr::Lit(CoreLit::Atom("ok".into())))
             }
 
-            Expr::Field(obj, field, _) => {
+            Expr::Index(container, key, _) => {
+                let container_expr = self.translate_expr(container);
+                let key_expr = self.translate_expr(key);
+                // Use maps:get for map access (also works for lists with integer keys via lists:nth)
+                CoreExpr::Call("maps".into(), "get".into(), vec![key_expr, container_expr])
+            }
+
+            Expr::Field(obj, _field, _) => {
                 // Record field access - translate to element/2 for tuples
                 // or maps:get for maps. For now, assume tuple-based records
                 let obj_expr = self.translate_expr(obj);

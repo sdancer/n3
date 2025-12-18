@@ -446,6 +446,30 @@ impl InferenceContext {
                 }
             }
 
+            Expr::Index(container, key, span) => {
+                let container_type = self.infer_expr(env, container)?;
+                let key_type = self.infer_expr(env, key)?;
+
+                // Check if it's a map or list access
+                let value_type = self.fresh_var();
+
+                // Try to unify with Map(key_type, value_type)
+                let map_type = Type::Map(Box::new(key_type.clone()), Box::new(value_type.clone()));
+                if self.unify(&container_type, &map_type, *span).is_ok() {
+                    return Ok(self.apply(&value_type));
+                }
+
+                // Try to unify with List(value_type) where key is Int
+                let list_type = Type::List(Box::new(value_type.clone()));
+                if self.unify(&container_type, &list_type, *span).is_ok() {
+                    self.unify(&key_type, &Type::Int, *span)?;
+                    return Ok(self.apply(&value_type));
+                }
+
+                // Default: return Any
+                Ok(Type::Any)
+            }
+
             Expr::Try { body, catch_arms, span } => {
                 let body_type = self.infer_expr(env, body)?;
 

@@ -168,6 +168,7 @@ pub enum Expr {
 
     // Field/variant access
     Field(Box<Expr>, Ident, Span),
+    Index(Box<Expr>, Box<Expr>, Span), // expr[key] - map/list access
     Path(Vec<Ident>, Span), // Foo::Bar::Baz
 
     // Process primitives
@@ -226,6 +227,7 @@ impl Expr {
             Expr::MethodCall(_, _, _, s) => *s,
             Expr::Lambda(_, _, _, s) => *s,
             Expr::Field(_, _, s) => *s,
+            Expr::Index(_, _, s) => *s,
             Expr::Path(_, s) => *s,
             Expr::Spawn(_, s) => *s,
             Expr::Send(_, _, s) => *s,

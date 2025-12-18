@@ -595,6 +595,13 @@ impl Parser {
                 } else {
                     break;
                 }
+            } else if self.check(&TokenKind::LBracket) {
+                // Index access: expr[key]
+                let start = expr.span();
+                self.advance();
+                let index = self.parse_expr()?;
+                self.expect(&TokenKind::RBracket)?;
+                expr = Expr::Index(Box::new(expr), Box::new(index), start.merge(self.prev_span()));
             } else {
                 break;
             }

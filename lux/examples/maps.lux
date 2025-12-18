@@ -1,4 +1,4 @@
-// Test map literals
+// Test map literals and access
 mod maptest
 
 fn create_map() {
@@ -11,7 +11,14 @@ fn number_map() {
     print(squares)
 }
 
+fn map_access() {
+    let person = %{:name => "Bob", :age => 25}
+    print(person[:name])
+    print(person[:age])
+}
+
 fn main() -> () {
     create_map()
     number_map()
+    map_access()
 }
