@@ -26,10 +26,16 @@ enum TokenKind {
     TokType,
     TokMod,
     TokUse,
+    TokCond,
+    TokFor,
+    TokIn,
+    TokExtern,
     TokPlus,
+    TokPlusPlus,
     TokMinus,
     TokStar,
     TokSlash,
+    TokPercent,
     TokEq,
     TokEqEq,
     TokNotEq,
@@ -247,6 +253,9 @@ fn check_keyword(chars: List<Int>) -> TokenKind {
         "type" => TokenKind::TokType,
         "mod" => TokenKind::TokMod,
         "use" => TokenKind::TokUse,
+        "cond" => TokenKind::TokCond,
+        "for" => TokenKind::TokFor,
+        "in" => TokenKind::TokIn,
         "extern" => TokenKind::TokExtern,
         "true" => TokenKind::TokBool(true),
         "false" => TokenKind::TokBool(false),
@@ -294,13 +303,26 @@ fn next_token(state: LexState) -> (Token, LexState) {
                 (make_tok(TokenKind::TokDot, start, s1.pos), s1)
             } else if c == '+' {
                 let s1 = advance(s0)
-                (make_tok(TokenKind::TokPlus, start, s1.pos), s1)
+                match peek(s1) {
+                    Option::Some(c2) => {
+                        if c2 == '+' {
+                            let s2 = advance(s1)
+                            (make_tok(TokenKind::TokPlusPlus, start, s2.pos), s2)
+                        } else {
+                            (make_tok(TokenKind::TokPlus, start, s1.pos), s1)
+                        }
+                    },
+                    Option::None => (make_tok(TokenKind::TokPlus, start, s1.pos), s1)
+                }
             } else if c == '*' {
                 let s1 = advance(s0)
                 (make_tok(TokenKind::TokStar, start, s1.pos), s1)
             } else if c == '/' {
                 let s1 = advance(s0)
                 (make_tok(TokenKind::TokSlash, start, s1.pos), s1)
+            } else if c == '%' {
+                let s1 = advance(s0)
+                (make_tok(TokenKind::TokPercent, start, s1.pos), s1)
             } else if c == '|' {
                 let s1 = advance(s0)
                 match peek(s1) {
@@ -504,9 +526,11 @@ fn token_name(kind: TokenKind) -> String {
         TokenKind::TokMod => "mod",
         TokenKind::TokUse => "use",
         TokenKind::TokPlus => "+",
+        TokenKind::TokPlusPlus => "++",
         TokenKind::TokMinus => "-",
         TokenKind::TokStar => "*",
         TokenKind::TokSlash => "/",
+        TokenKind::TokPercent => "%",
         TokenKind::TokEq => "=",
         TokenKind::TokEqEq => "==",
         TokenKind::TokNotEq => "!=",

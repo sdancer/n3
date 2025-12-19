@@ -55,6 +55,21 @@ enum Expr {
     ExprCall(Expr, List<Expr>, Span),
     ExprLambda(List<Param>, Expr, Span),
     ExprPath(List<String>, Span),
+    ExprCond(List<CondBranch>, Span),
+    ExprListComp(Expr, String, Expr, Option<Expr>, Span),
+    ExprFieldAccess(Expr, String, Span),
+    ExprStructInit(String, List<FieldInit>, Span),
+}
+
+struct FieldInit {
+    name: String,
+    value: Expr
+}
+
+struct CondBranch {
+    condition: Expr,
+    result: Expr,
+    span: Span
 }
 
 struct MatchArm {
@@ -182,9 +197,10 @@ fn translate_expr(expr: Expr, counter: Int) -> (CoreExpr, Int) {
         Expr::ExprLambda(params, body, _) => translate_lambda(params, body, counter),
         Expr::ExprPath(segments, _) => translate_path(segments, counter),
         Expr::ExprMatch(scrutinee, arms, _) => translate_match(scrutinee, arms, counter),
-        Expr::ExprListComp(body, var, iter, _) => translate_list_comp(body, var, iter, counter),
+        Expr::ExprListComp(body, var, iter, filter_opt, _) => translate_list_comp(body, var, iter, filter_opt, counter),
         Expr::ExprFieldAccess(obj, field, _) => translate_field_access(obj, field, counter),
         Expr::ExprStructInit(_name, fields, _span) => translate_struct_init(fields, counter),
+        Expr::ExprCond(branches, _) => translate_cond(branches, counter),
         _ => (CoreExpr::CoreLitAtom("todo"), counter)
     }
 }
@@ -223,19 +239,54 @@ fn translate_if(cond_e: Expr, then_e: Expr, else_opt: Option<Expr>, counter: Int
     (CoreExpr::CoreCase(cond_core, clauses), c3)
 }
 
+// Translate cond expression to Core Erlang case on 'true' with guards
+fn translate_cond(branches: List<CondBranch>, counter: Int) -> (CoreExpr, Int) {
+    let (clauses, new_counter) = translate_cond_branches(branches, counter)
+    // Case on literal 'true' - the guards do the actual condition checking
+    (CoreExpr::CoreCase(CoreExpr::CoreLitAtom("true"), clauses), new_counter)
+}
+
+fn translate_cond_branches(branches: List<CondBranch>, counter: Int) -> (List<CoreClause>, Int) {
+    match branches {
+        [] => ([], counter),
+        [b | rest] => {
+            let (cond_core, c1) = translate_expr(b.condition, counter)
+            let (result_core, c2) = translate_expr(b.result, c1)
+            let clause = CoreClause {
+                pattern: CorePattern::CorePatLitAtom("true"),
+                guard: cond_core,
+                body: result_core
+            }
+            let (rest_clauses, c3) = translate_cond_branches(rest, c2)
+            ([clause | rest_clauses], c3)
+        }
+    }
+}
+
 fn translate_lambda(params: List<Param>, body: Expr, counter: Int) -> (CoreExpr, Int) {
     let core_params = [mangle_var(p.name) for p in params]
     let (body_core, new_counter) = translate_expr(body, counter)
     (CoreExpr::CoreFun(core_params, body_core), new_counter)
 }
 
-fn translate_list_comp(body: Expr, var: String, iter: Expr, counter: Int) -> (CoreExpr, Int) {
+fn translate_list_comp(body: Expr, var: String, iter: Expr, filter_opt: Option<Expr>, counter: Int) -> (CoreExpr, Int) {
     // Translate [body for var in iter] to lists:map(fun(var) -> body end, iter)
+    // Translate [body for var in iter if cond] to lists:map(fun(var) -> body end, lists:filter(fun(var) -> cond end, iter))
     let mangled_var = mangle_var(var)
     let (body_core, c1) = translate_expr(body, counter)
     let (iter_core, c2) = translate_expr(iter, c1)
-    let lambda = CoreExpr::CoreFun([mangled_var], body_core)
-    (CoreExpr::CoreCall("lists", "map", [lambda, iter_core]), c2)
+    let map_lambda = CoreExpr::CoreFun([mangled_var], body_core)
+    match filter_opt {
+        Option::Some(filter_expr) => {
+            let (filter_core, c3) = translate_expr(filter_expr, c2)
+            let filter_lambda = CoreExpr::CoreFun([mangled_var], filter_core)
+            let filtered = CoreExpr::CoreCall("lists", "filter", [filter_lambda, iter_core])
+            (CoreExpr::CoreCall("lists", "map", [map_lambda, filtered]), c3)
+        },
+        Option::None => {
+            (CoreExpr::CoreCall("lists", "map", [map_lambda, iter_core]), c2)
+        }
+    }
 }
 
 fn translate_field_access(obj: Expr, field: String, counter: Int) -> (CoreExpr, Int) {
