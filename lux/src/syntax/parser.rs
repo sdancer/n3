@@ -410,7 +410,12 @@ impl Parser {
         let start = self.current_span();
         self.expect(&TokenKind::Fn)?;
         let module = self.expect_ident()?;
-        self.expect(&TokenKind::Colon)?;
+        // Accept either : or :: for module separator (:: preferred to avoid atom ambiguity)
+        if self.check(&TokenKind::Colon2) {
+            self.advance();
+        } else {
+            self.expect(&TokenKind::Colon)?;
+        }
         let name = self.expect_ident()?;
         let type_params = self.parse_type_params()?;
 

@@ -611,9 +611,33 @@ impl Translator {
                         } else if name == "str_starts_with" && arg_exprs.len() == 2 {
                             // str_starts_with(s, prefix) -> string:prefix(s, prefix)
                             CoreExpr::Call("string".to_string(), "prefix".to_string(), arg_exprs)
+                        } else if name == "str_slice" && arg_exprs.len() == 3 {
+                            // str_slice(s, start, len) -> string:slice(s, start, len)
+                            CoreExpr::Call("string".to_string(), "slice".to_string(), arg_exprs)
+                        } else if name == "str_char_at" && arg_exprs.len() == 2 {
+                            // str_char_at(s, index) -> lists:nth(index + 1, s)
+                            // lists:nth is 1-indexed, so we add 1 to the 0-indexed input
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            let index_plus_1 = CoreExpr::Call(
+                                "erlang".to_string(),
+                                "+".to_string(),
+                                vec![args[1].clone(), CoreExpr::Lit(CoreLit::Int(1))]
+                            );
+                            CoreExpr::Call("lists".to_string(), "nth".to_string(), vec![index_plus_1, args[0].clone()])
+                        } else if name == "str_ends_with" && arg_exprs.len() == 2 {
+                            // str_ends_with(s, suffix) -> string:find(s, suffix, trailing) != nomatch
+                            let args: Vec<_> = arg_exprs.into_iter().collect();
+                            let find_call = CoreExpr::Call("string".to_string(), "find".to_string(),
+                                vec![args[0].clone(), args[1].clone(), CoreExpr::Lit(CoreLit::Atom("trailing".into()))]);
+                            CoreExpr::Call("erlang".to_string(), "/=".to_string(),
+                                vec![find_call, CoreExpr::Lit(CoreLit::Atom("nomatch".into()))])
                         } else if name == "chars" && arg_exprs.len() == 1 {
                             // chars(s) -> string:to_graphemes(s)
                             CoreExpr::Call("string".to_string(), "to_graphemes".to_string(), arg_exprs)
+                        } else if name == "str_from_chars" && arg_exprs.len() == 1 {
+                            // str_from_chars(list) -> list (identity in Erlang)
+                            // In Erlang, a list of integers IS a string
+                            arg_exprs.into_iter().next().unwrap()
                         } else if name == "take" && arg_exprs.len() == 2 {
                             // take(n, list) -> lists:sublist(list, n)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
@@ -717,6 +741,9 @@ impl Translator {
                         } else if name == "exit_code" && arg_exprs.len() == 1 {
                             // exit_code(n) -> erlang:halt(n)
                             CoreExpr::Call("erlang".to_string(), "halt".to_string(), arg_exprs)
+                        } else if name == "os_cmd" && arg_exprs.len() == 1 {
+                            // os_cmd(cmd) -> os:cmd(cmd) - run shell command
+                            CoreExpr::Call("os".to_string(), "cmd".to_string(), arg_exprs)
                         // Process dictionary
                         } else if name == "get" && arg_exprs.len() == 1 {
                             // get(key) -> erlang:get(key)
@@ -1168,6 +1195,10 @@ impl Translator {
             Pattern::Atom(a, _) => CorePattern::Lit(CoreLit::Atom(a.clone())),
 
             Pattern::Tuple(pats, _) => {
+                // Empty tuple () is unit type, translate to 'ok' atom to match expression
+                if pats.is_empty() {
+                    return CorePattern::Lit(CoreLit::Atom("ok".into()));
+                }
                 let patterns: Vec<CorePattern> = pats
                     .iter()
                     .map(|p| self.translate_pattern(p))

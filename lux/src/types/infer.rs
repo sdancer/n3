@@ -11,6 +11,18 @@ pub struct InferenceContext {
     next_type_id: TypeId,
     substitution: Substitution,
     type_defs: HashMap<String, TypeDef>,
+    /// Extern function signatures: key is "module::name", value is function type scheme
+    extern_fns: HashMap<String, Scheme>,
+    /// Struct definitions for type-checking StructInit
+    struct_defs: HashMap<String, StructDef>,
+}
+
+/// Struct definition for type checking
+#[derive(Debug, Clone)]
+pub struct StructDef {
+    pub type_id: TypeId,
+    pub type_params: Vec<String>,
+    pub fields: Vec<(String, Type)>,
 }
 
 #[derive(Debug, Clone)]
@@ -27,6 +39,8 @@ impl InferenceContext {
             next_type_id: 0,
             substitution: Substitution::new(),
             type_defs: HashMap::new(),
+            extern_fns: HashMap::new(),
+            struct_defs: HashMap::new(),
         }
     }
 
@@ -45,10 +59,63 @@ impl InferenceContext {
     }
 
     /// Register a type definition
+    /// If the type already exists, update it in place (keeping the same ID)
     pub fn register_type(&mut self, name: String, params: Vec<String>, variants: Vec<(String, Vec<Type>)>) -> TypeId {
-        let id = self.fresh_type_id();
-        self.type_defs.insert(name, TypeDef { id, params, variants });
-        id
+        if let Some(existing) = self.type_defs.get(&name) {
+            // Type already registered - update in place, keeping the same ID
+            let id = existing.id;
+            self.type_defs.insert(name, TypeDef { id, params, variants });
+            id
+        } else {
+            // New type - allocate a fresh ID
+            let id = self.fresh_type_id();
+            self.type_defs.insert(name, TypeDef { id, params, variants });
+            id
+        }
+    }
+
+    /// Register an extern function with its type signature
+    /// Key format: "module::name" (e.g., "lists::reverse")
+    pub fn register_extern_fn(&mut self, module: &str, name: &str, type_params: &[String], param_types: Vec<Type>, return_type: Type) {
+        let key = format!("{}::{}", module, name);
+
+        // Collect type variables from type parameters
+        let vars: Vec<TyVar> = (0..type_params.len() as TyVar).collect();
+
+        // Create function type
+        let fn_type = Type::Function(param_types, Box::new(return_type));
+
+        // Create scheme (generalized over type params)
+        let scheme = Scheme { vars, ty: fn_type };
+
+        self.extern_fns.insert(key, scheme);
+    }
+
+    /// Look up an extern function by module and name
+    pub fn lookup_extern_fn(&self, module: &str, name: &str) -> Option<&Scheme> {
+        let key = format!("{}::{}", module, name);
+        self.extern_fns.get(&key)
+    }
+
+    /// Register a struct definition
+    /// If the struct already exists, update it in place (keeping the same ID)
+    pub fn register_struct(&mut self, name: String, type_params: Vec<String>, fields: Vec<(String, Type)>) -> TypeId {
+        if let Some(existing) = self.struct_defs.get(&name) {
+            // Struct already registered - update in place, keeping the same ID
+            let type_id = existing.type_id;
+            self.struct_defs.insert(name, StructDef { type_id, type_params, fields });
+            type_id
+        } else {
+            // New struct - allocate a fresh ID
+            let type_id = self.fresh_type_id();
+            self.struct_defs.insert(name, StructDef { type_id, type_params, fields });
+            type_id
+        }
+    }
+
+    /// Look up a struct definition
+    pub fn lookup_struct(&self, name: &str) -> Option<&StructDef> {
+        self.struct_defs.get(name)
     }
 
     /// Instantiate a type scheme with fresh variables
@@ -127,10 +194,41 @@ impl InferenceContext {
                     "Ref" => Type::Ref,
                     "Never" => Type::Never,
                     "Any" => Type::Any,
+                    "List" => {
+                        // List<T> is a built-in generic type
+                        if args.len() == 1 {
+                            let elem_type = self.type_expr_to_type(&args[0], type_params)?;
+                            Type::List(Box::new(elem_type))
+                        } else if args.is_empty() {
+                            // List without type param - use fresh var
+                            Type::List(Box::new(self.fresh_var()))
+                        } else {
+                            return Err(TypeError::UnboundType(format!("List expects 1 type argument, got {}", args.len()), *span));
+                        }
+                    }
+                    "Map" => {
+                        // Map<K, V> is a built-in generic type
+                        if args.len() == 2 {
+                            let key_type = self.type_expr_to_type(&args[0], type_params)?;
+                            let value_type = self.type_expr_to_type(&args[1], type_params)?;
+                            Type::Map(Box::new(key_type), Box::new(value_type))
+                        } else if args.is_empty() {
+                            Type::Map(Box::new(self.fresh_var()), Box::new(self.fresh_var()))
+                        } else {
+                            return Err(TypeError::UnboundType(format!("Map expects 2 type arguments, got {}", args.len()), *span));
+                        }
+                    }
                     _ => {
-                        // Look up user-defined type
-                        let def_id = self.type_defs.get(name).map(|d| d.id);
-                        if let Some(id) = def_id {
+                        // Look up user-defined type (check enums first, then structs)
+                        if let Some(type_def) = self.type_defs.get(name) {
+                            let id = type_def.id;
+                            let mut type_args = Vec::new();
+                            for a in args {
+                                type_args.push(self.type_expr_to_type(a, type_params)?);
+                            }
+                            Type::Named(id, name.clone(), type_args)
+                        } else if let Some(struct_def) = self.struct_defs.get(name) {
+                            let id = struct_def.type_id;
                             let mut type_args = Vec::new();
                             for a in args {
                                 type_args.push(self.type_expr_to_type(a, type_params)?);
@@ -502,17 +600,220 @@ impl InferenceContext {
                 Ok(self.apply(&body_type))
             }
 
-            // TODO: implement remaining expression types
-            _ => Ok(self.fresh_var()),
+            Expr::Char(_, _) => Ok(Type::Int), // Chars are integers in Erlang
+
+            Expr::Path(segments, span) => {
+                // Path can be:
+                // 1. An extern function reference: module::function
+                // 2. An enum variant: Option::Some
+                // 3. A qualified function call: module::function (same as 1)
+                if segments.len() == 2 {
+                    let module = &segments[0];
+                    let name = &segments[1];
+
+                    // Try extern function lookup
+                    if let Some(scheme) = self.lookup_extern_fn(module, name).cloned() {
+                        return Ok(self.instantiate(&scheme));
+                    }
+
+                    // Try enum variant lookup
+                    if let Some(type_def) = self.type_defs.get(module).cloned() {
+                        for (variant_name, fields) in &type_def.variants {
+                            if variant_name == name {
+                                // Create constructor type
+                                let type_args: Vec<Type> = type_def.params.iter()
+                                    .map(|_| self.fresh_var())
+                                    .collect();
+                                let result_type = Type::Named(type_def.id, module.clone(), type_args.clone());
+
+                                if fields.is_empty() {
+                                    return Ok(result_type);
+                                } else {
+                                    // Substitute type params in field types
+                                    let mapping: HashMap<TyVar, Type> = type_def.params.iter()
+                                        .enumerate()
+                                        .map(|(i, _)| (i as TyVar, type_args[i].clone()))
+                                        .collect();
+                                    let field_types: Vec<Type> = fields.iter()
+                                        .map(|f| self.substitute_vars(f, &mapping))
+                                        .collect();
+                                    return Ok(Type::Function(field_types, Box::new(result_type)));
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Unknown path - return fresh var (will be caught by later unification if wrong)
+                Err(TypeError::UnboundVariable(segments.join("::"), *span))
+            }
+
+            Expr::Match(scrutinee, arms, span) => {
+                let scrutinee_type = self.infer_expr(env, scrutinee)?;
+                let result_type = self.fresh_var();
+
+                for arm in arms {
+                    // Create environment with pattern bindings
+                    let mut arm_env = env.clone();
+                    self.bind_pattern_vars(&mut arm_env, &arm.pattern, &self.apply(&scrutinee_type));
+
+                    // Check guard if present
+                    if let Some(guard) = &arm.guard {
+                        let guard_type = self.infer_expr(&arm_env, guard)?;
+                        self.unify(&guard_type, &Type::Bool, *span)?;
+                    }
+
+                    // Infer arm body and unify with result type
+                    let body_type = self.infer_expr(&arm_env, &arm.body)?;
+                    self.unify(&result_type, &body_type, *span)?;
+                }
+
+                Ok(self.apply(&result_type))
+            }
+
+            Expr::StructInit(name, fields, span) => {
+                // Look up struct definition
+                if let Some(struct_def) = self.struct_defs.get(name).cloned() {
+                    // Create fresh type variables for type parameters
+                    let type_args: Vec<Type> = struct_def.type_params.iter()
+                        .map(|_| self.fresh_var())
+                        .collect();
+
+                    // Build substitution from type params to fresh vars
+                    let mapping: HashMap<TyVar, Type> = struct_def.type_params.iter()
+                        .enumerate()
+                        .map(|(i, _)| (i as TyVar, type_args[i].clone()))
+                        .collect();
+
+                    // Check each field
+                    for (field_name, field_expr) in fields {
+                        let expr_type = self.infer_expr(env, field_expr)?;
+
+                        // Find the expected field type
+                        if let Some((_, expected_type)) = struct_def.fields.iter()
+                            .find(|(n, _)| n == field_name)
+                        {
+                            let expected = self.substitute_vars(expected_type, &mapping);
+                            self.unify(&expr_type, &expected, *span)?;
+                        } else {
+                            return Err(TypeError::UnboundVariable(
+                                format!("{}::{}", name, field_name),
+                                *span,
+                            ));
+                        }
+                    }
+
+                    Ok(Type::Named(struct_def.type_id, name.clone(), type_args))
+                } else {
+                    Err(TypeError::UnboundType(name.clone(), *span))
+                }
+            }
+
+            Expr::Field(expr, field_name, span) => {
+                let expr_type = self.infer_expr(env, expr)?;
+                let applied = self.apply(&expr_type);
+
+                // Try record field access
+                if let Type::Record(fields) = &applied {
+                    for (name, ty) in fields {
+                        if name == field_name {
+                            return Ok(ty.clone());
+                        }
+                    }
+                }
+
+                // Try struct field access
+                if let Type::Named(_, struct_name, type_args) = &applied {
+                    if let Some(struct_def) = self.struct_defs.get(struct_name).cloned() {
+                        // Build substitution
+                        let mapping: HashMap<TyVar, Type> = struct_def.type_params.iter()
+                            .enumerate()
+                            .map(|(i, _)| (i as TyVar, type_args.get(i).cloned().unwrap_or_else(|| self.fresh_var())))
+                            .collect();
+
+                        for (name, ty) in &struct_def.fields {
+                            if name == field_name {
+                                return Ok(self.substitute_vars(ty, &mapping));
+                            }
+                        }
+                    }
+                }
+
+                // Try tuple access for .0, .1, etc.
+                if let Ok(index) = field_name.parse::<usize>() {
+                    if let Type::Tuple(elem_types) = &applied {
+                        if index < elem_types.len() {
+                            return Ok(elem_types[index].clone());
+                        }
+                    }
+                }
+
+                // Unknown field - return fresh var
+                Ok(self.fresh_var())
+            }
+
+            Expr::MethodCall(receiver, method_name, args, span) => {
+                let receiver_type = self.infer_expr(env, receiver)?;
+
+                // Infer argument types
+                let mut arg_types: Vec<Type> = vec![receiver_type];
+                for arg in args {
+                    arg_types.push(self.infer_expr(env, arg)?);
+                }
+
+                // For now, method calls are treated as function calls
+                // The return type is fresh
+                let return_type = self.fresh_var();
+
+                // Try to look up the method in extern functions as "Type::method"
+                let applied = self.apply(&arg_types[0]);
+                if let Type::Named(_, type_name, _) = &applied {
+                    if let Some(scheme) = self.lookup_extern_fn(type_name, method_name).cloned() {
+                        let fn_type = self.instantiate(&scheme);
+                        let expected = Type::Function(arg_types, Box::new(return_type.clone()));
+                        self.unify(&fn_type, &expected, *span)?;
+                        return Ok(self.apply(&return_type));
+                    }
+                }
+
+                Ok(self.apply(&return_type))
+            }
+
+            Expr::Record(fields, _span) => {
+                let field_types: Vec<(String, Type)> = fields.iter()
+                    .map(|(name, expr)| {
+                        let ty = self.infer_expr(env, expr)?;
+                        Ok((name.clone(), ty))
+                    })
+                    .collect::<Result<_, TypeError>>()?;
+                Ok(Type::Record(field_types))
+            }
+
+            Expr::BitString(elements, span) => {
+                // Bit strings contain integer values
+                for elem in elements {
+                    let elem_type = self.infer_expr(env, elem)?;
+                    // Each element should be compatible with Int or String
+                    let int_unify = self.unify(&elem_type, &Type::Int, *span);
+                    if int_unify.is_err() {
+                        self.unify(&elem_type, &Type::String, *span)?;
+                    }
+                }
+                Ok(Type::String) // BitString is represented as binary/String
+            }
         }
     }
 
     /// Bind variables from a pattern to the environment with appropriate types
     fn bind_pattern_vars(&mut self, env: &mut TypeEnv, pattern: &crate::syntax::ast::Pattern, ty: &Type) {
         use crate::syntax::ast::Pattern;
+
+        // Apply substitution to resolve type variables
+        let resolved_ty = self.apply(ty);
+
         match pattern {
             Pattern::Var(name, _) => {
-                let scheme = self.generalize(env, ty);
+                let scheme = self.generalize(env, &resolved_ty);
                 env.insert(name.clone(), scheme);
             }
             Pattern::Wildcard(_) => {
@@ -520,12 +821,12 @@ impl InferenceContext {
             }
             Pattern::Tuple(pats, _) => {
                 // For tuples, try to destructure the type
-                if let Type::Tuple(elem_types) = ty {
+                if let Type::Tuple(elem_types) = &resolved_ty {
                     for (pat, elem_ty) in pats.iter().zip(elem_types.iter()) {
                         self.bind_pattern_vars(env, pat, elem_ty);
                     }
                 } else {
-                    // Type mismatch - bind all vars as fresh type vars
+                    // Type mismatch or unresolved - bind all vars as fresh type vars
                     for pat in pats {
                         let fresh = self.fresh_var();
                         self.bind_pattern_vars(env, pat, &fresh);
@@ -533,12 +834,22 @@ impl InferenceContext {
                 }
             }
             Pattern::List(pats, tail, _) => {
-                if let Type::List(elem_ty) = ty {
+                if let Type::List(elem_ty) = &resolved_ty {
                     for pat in pats {
                         self.bind_pattern_vars(env, pat, elem_ty);
                     }
                     if let Some(tail_pat) = tail {
-                        self.bind_pattern_vars(env, tail_pat, ty);
+                        self.bind_pattern_vars(env, tail_pat, &resolved_ty);
+                    }
+                } else {
+                    // Type is not a list (possibly unresolved var) - use fresh vars
+                    let elem_ty = self.fresh_var();
+                    for pat in pats {
+                        self.bind_pattern_vars(env, pat, &elem_ty);
+                    }
+                    if let Some(tail_pat) = tail {
+                        let list_ty = Type::List(Box::new(elem_ty));
+                        self.bind_pattern_vars(env, tail_pat, &list_ty);
                     }
                 }
             }
