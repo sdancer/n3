@@ -584,6 +584,7 @@ mod tests {
     fn test_comments() {
         let tokens = Lexer::new("fn // comment\nmain").tokenize();
         assert_eq!(tokens[0].kind, TokenKind::Fn);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("main".into()));
+        assert_eq!(tokens[1].kind, TokenKind::Newline);
+        assert_eq!(tokens[2].kind, TokenKind::Ident("main".into()));
     }
 }
