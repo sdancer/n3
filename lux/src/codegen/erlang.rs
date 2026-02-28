@@ -22,8 +22,8 @@ pub enum CoreExpr {
     Tuple(Vec<CoreExpr>),
     List(Vec<CoreExpr>, Box<CoreExpr>), // elements, tail
     Cons(Box<CoreExpr>, Box<CoreExpr>),
-    Map(Vec<(CoreExpr, CoreExpr)>),      // #{k => v, ...}
-    Binary(Vec<CoreExpr>),               // <<E1, E2, ...>>
+    Map(Vec<(CoreExpr, CoreExpr)>), // #{k => v, ...}
+    Binary(Vec<CoreExpr>),          // <<E1, E2, ...>>
 
     // Local function reference: 'name'/arity
     LocalFunRef(String, usize),

@@ -91,7 +91,11 @@ impl Substitution {
 
     pub fn apply(&self, ty: &Type) -> Type {
         match ty {
-            Type::Var(v) => self.mapping.get(v).cloned().map_or(ty.clone(), |t| self.apply(&t)),
+            Type::Var(v) => self
+                .mapping
+                .get(v)
+                .cloned()
+                .map_or(ty.clone(), |t| self.apply(&t)),
             Type::Function(params, ret) => Type::Function(
                 params.iter().map(|p| self.apply(p)).collect(),
                 Box::new(self.apply(ret)),
@@ -99,12 +103,17 @@ impl Substitution {
             Type::Tuple(ts) => Type::Tuple(ts.iter().map(|t| self.apply(t)).collect()),
             Type::List(elem) => Type::List(Box::new(self.apply(elem))),
             Type::Map(k, v) => Type::Map(Box::new(self.apply(k)), Box::new(self.apply(v))),
-            Type::Record(fields) => {
-                Type::Record(fields.iter().map(|(n, t)| (n.clone(), self.apply(t))).collect())
-            }
-            Type::Named(id, name, args) => {
-                Type::Named(*id, name.clone(), args.iter().map(|a| self.apply(a)).collect())
-            }
+            Type::Record(fields) => Type::Record(
+                fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), self.apply(t)))
+                    .collect(),
+            ),
+            Type::Named(id, name, args) => Type::Named(
+                *id,
+                name.clone(),
+                args.iter().map(|a| self.apply(a)).collect(),
+            ),
             _ => ty.clone(),
         }
     }

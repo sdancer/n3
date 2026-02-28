@@ -202,7 +202,12 @@ impl Emitter {
 
             CoreExpr::Receive { clauses, timeout } => {
                 // Generate receive using primops (required for modern Core Erlang)
-                self.emit_receive_primop(clauses, timeout.as_ref().map(|(ms, body)| (ms.as_ref(), body.as_ref())));
+                self.emit_receive_primop(
+                    clauses,
+                    timeout
+                        .as_ref()
+                        .map(|(ms, body)| (ms.as_ref(), body.as_ref())),
+                );
             }
 
             CoreExpr::Primop(op, args) => {
@@ -224,7 +229,13 @@ impl Emitter {
                 self.emit_expr(second);
             }
 
-            CoreExpr::Try { body, vars, handler, evars, catch } => {
+            CoreExpr::Try {
+                body,
+                vars,
+                handler,
+                evars,
+                catch,
+            } => {
                 write!(&mut self.output, "try ").unwrap();
                 self.emit_expr(body);
                 write!(&mut self.output, " of <").unwrap();
@@ -301,7 +312,11 @@ impl Emitter {
     }
 
     /// Generate receive using the primop-based approach required by modern Core Erlang
-    fn emit_receive_primop(&mut self, clauses: &[CoreClause], timeout: Option<(&CoreExpr, &CoreExpr)>) {
+    fn emit_receive_primop(
+        &mut self,
+        clauses: &[CoreClause],
+        timeout: Option<(&CoreExpr, &CoreExpr)>,
+    ) {
         // Generate a letrec with a receive loop matching Erlang compiler output format exactly
         // The letrec_goto annotation tells the compiler this is a receive loop
         writeln!(&mut self.output, "( letrec").unwrap();
@@ -357,7 +372,11 @@ impl Emitter {
         writeln!(&mut self.output, "<_Other> when 'true' ->").unwrap();
         self.indent += 1;
         self.emit_indent();
-        writeln!(&mut self.output, "do primop 'recv_next' () apply 'recv$^0'/0 ()").unwrap();
+        writeln!(
+            &mut self.output,
+            "do primop 'recv_next' () apply 'recv$^0'/0 ()"
+        )
+        .unwrap();
         self.indent -= 1;
 
         self.indent -= 1;
@@ -399,7 +418,11 @@ impl Emitter {
         writeln!(&mut self.output).unwrap();
 
         self.emit_indent();
-        writeln!(&mut self.output, "<'false'> when 'true' -> apply 'recv$^0'/0 ()").unwrap();
+        writeln!(
+            &mut self.output,
+            "<'false'> when 'true' -> apply 'recv$^0'/0 ()"
+        )
+        .unwrap();
         self.indent -= 1;
         self.emit_indent();
         writeln!(&mut self.output, "end").unwrap();

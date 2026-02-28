@@ -1,5 +1,5 @@
 use crate::syntax::span::Span;
-use crate::types::types::{Type, TyVar, Substitution};
+use crate::types::types::{Substitution, TyVar, Type};
 
 #[derive(Debug, Clone)]
 pub enum TypeError {
@@ -23,7 +23,11 @@ impl std::fmt::Display for TypeError {
                 write!(f, "Infinite type: {} occurs in {:?}", v, t)
             }
             TypeError::ArityMismatch(expected, found, _) => {
-                write!(f, "Arity mismatch: expected {} args, found {}", expected, found)
+                write!(
+                    f,
+                    "Arity mismatch: expected {} args, found {}",
+                    expected, found
+                )
             }
             TypeError::UnboundVariable(name, _) => {
                 write!(f, "Unbound variable: {}", name)

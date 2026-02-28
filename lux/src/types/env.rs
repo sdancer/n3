@@ -1,5 +1,5 @@
+use crate::types::types::{Scheme, Substitution, TyVar, Type};
 use std::collections::HashMap;
-use crate::types::types::{Scheme, Type, TyVar, Substitution};
 
 /// Type environment mapping names to type schemes
 #[derive(Debug, Clone, Default)]
@@ -48,7 +48,13 @@ impl TypeEnv {
         let mut new = TypeEnv::new();
         for (name, scheme) in &self.bindings {
             let new_ty = subst.apply(&scheme.ty);
-            new.insert(name.clone(), Scheme { vars: scheme.vars.clone(), ty: new_ty });
+            new.insert(
+                name.clone(),
+                Scheme {
+                    vars: scheme.vars.clone(),
+                    ty: new_ty,
+                },
+            );
         }
         new
     }

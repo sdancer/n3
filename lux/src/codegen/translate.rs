@@ -4,8 +4,8 @@ use crate::syntax::ast::{self, Expr, InterpolatedPart, Item, Module, Pattern, St
 /// Helper enum for let binding types
 #[derive(Debug)]
 enum LetPart {
-    Simple(String),           // Simple variable binding
-    Pattern(CorePattern),     // Pattern destructuring
+    Simple(String),       // Simple variable binding
+    Pattern(CorePattern), // Pattern destructuring
 }
 
 /// Convert PascalCase to snake_case
@@ -95,7 +95,8 @@ impl Translator {
 
     /// Check if a name is a local function and return its arity
     fn lookup_function(&self, name: &str) -> Option<usize> {
-        self.functions.iter()
+        self.functions
+            .iter()
             .find(|(n, _)| n == name)
             .map(|(_, arity)| *arity)
     }
@@ -145,10 +146,16 @@ impl Translator {
                 // io_lib:format returns an iolist, wrap with lists:flatten to get string
                 let format_expr = CoreExpr::Lit(CoreLit::String(format_str));
                 let args_list = self.build_list(args);
-                let io_list = CoreExpr::Call("io_lib".into(), "format".into(), vec![format_expr, args_list]);
+                let io_list = CoreExpr::Call(
+                    "io_lib".into(),
+                    "format".into(),
+                    vec![format_expr, args_list],
+                );
                 CoreExpr::Call("lists".into(), "flatten".into(), vec![io_list])
             }
-            Expr::Bool(b, _) => CoreExpr::Lit(CoreLit::Atom(if *b { "true" } else { "false" }.into())),
+            Expr::Bool(b, _) => {
+                CoreExpr::Lit(CoreLit::Atom(if *b { "true" } else { "false" }.into()))
+            }
             Expr::Atom(a, _) => CoreExpr::Lit(CoreLit::Atom(a.clone())),
             Expr::Unit(_) => CoreExpr::Lit(CoreLit::Atom("ok".into())),
 
@@ -189,18 +196,18 @@ impl Translator {
                     CoreExpr::Call(
                         "erlang".into(),
                         "-".into(),
-                        vec![
-                            self.translate_expr(end),
-                            CoreExpr::Lit(CoreLit::Int(1)),
-                        ],
+                        vec![self.translate_expr(end), CoreExpr::Lit(CoreLit::Int(1))],
                     )
                 };
                 CoreExpr::Call("lists".into(), "seq".into(), vec![start_expr, end_expr])
             }
 
-            Expr::ListComp { expr, generators, filters, .. } => {
-                self.translate_list_comp(expr, generators, filters)
-            }
+            Expr::ListComp {
+                expr,
+                generators,
+                filters,
+                ..
+            } => self.translate_list_comp(expr, generators, filters),
 
             Expr::Binary(left, op, right, _) => {
                 let l = self.translate_expr(left);
@@ -226,7 +233,10 @@ impl Translator {
                         // If right side is a function name, use LocalFunRef or Call
                         if let Expr::Var(name, _) = right.as_ref() {
                             // Check if it's a built-in function
-                            if matches!(name.as_str(), "length" | "hd" | "tl" | "reverse" | "sort" | "flatten" | "abs") {
+                            if matches!(
+                                name.as_str(),
+                                "length" | "hd" | "tl" | "reverse" | "sort" | "flatten" | "abs"
+                            ) {
                                 let (module, func) = match name.as_str() {
                                     "length" | "hd" | "tl" | "abs" => ("erlang", name.as_str()),
                                     _ => ("lists", name.as_str()),
@@ -235,7 +245,7 @@ impl Translator {
                             } else if self.lookup_function(name).is_some() {
                                 return CoreExpr::Apply(
                                     Box::new(CoreExpr::LocalFunRef(name.clone(), 1)),
-                                    vec![l]
+                                    vec![l],
                                 );
                             }
                         }
@@ -346,12 +356,11 @@ impl Translator {
                 CoreExpr::Case(Box::new(scrut), clauses)
             }
 
-            Expr::Block(stmts, final_expr, _) => {
-                self.translate_block(stmts, final_expr.as_deref())
-            }
+            Expr::Block(stmts, final_expr, _) => self.translate_block(stmts, final_expr.as_deref()),
 
             Expr::Call(func, args, _) => {
-                let arg_exprs: Vec<CoreExpr> = args.iter().map(|a| self.translate_expr(a)).collect();
+                let arg_exprs: Vec<CoreExpr> =
+                    args.iter().map(|a| self.translate_expr(a)).collect();
 
                 // Check if it's a direct function call (Var) or path
                 match func.as_ref() {
@@ -360,19 +369,31 @@ impl Translator {
                         if name == "print" {
                             // print(x) -> io:format("~p~n", [x])
                             let format_str = CoreExpr::Lit(CoreLit::String("~p~n".to_string()));
-                            let args_list = arg_exprs.into_iter().rev().fold(
-                                CoreExpr::Lit(CoreLit::Nil),
-                                |acc, elem| CoreExpr::Cons(Box::new(elem), Box::new(acc))
-                            );
-                            CoreExpr::Call("io".to_string(), "format".to_string(), vec![format_str, args_list])
+                            let args_list = arg_exprs
+                                .into_iter()
+                                .rev()
+                                .fold(CoreExpr::Lit(CoreLit::Nil), |acc, elem| {
+                                    CoreExpr::Cons(Box::new(elem), Box::new(acc))
+                                });
+                            CoreExpr::Call(
+                                "io".to_string(),
+                                "format".to_string(),
+                                vec![format_str, args_list],
+                            )
                         } else if name == "println" {
                             // println(x) -> io:format("~p~n", [x]) (same as print for now)
                             let format_str = CoreExpr::Lit(CoreLit::String("~p~n".to_string()));
-                            let args_list = arg_exprs.into_iter().rev().fold(
-                                CoreExpr::Lit(CoreLit::Nil),
-                                |acc, elem| CoreExpr::Cons(Box::new(elem), Box::new(acc))
-                            );
-                            CoreExpr::Call("io".to_string(), "format".to_string(), vec![format_str, args_list])
+                            let args_list = arg_exprs
+                                .into_iter()
+                                .rev()
+                                .fold(CoreExpr::Lit(CoreLit::Nil), |acc, elem| {
+                                    CoreExpr::Cons(Box::new(elem), Box::new(acc))
+                                });
+                            CoreExpr::Call(
+                                "io".to_string(),
+                                "format".to_string(),
+                                vec![format_str, args_list],
+                            )
                         } else if name == "length" && arg_exprs.len() == 1 {
                             // length(list) -> erlang:length(list)
                             CoreExpr::Call("erlang".to_string(), "length".to_string(), arg_exprs)
@@ -408,30 +429,66 @@ impl Translator {
                             let format_str = CoreExpr::Lit(CoreLit::String("~p".to_string()));
                             let args_list = CoreExpr::Cons(
                                 Box::new(arg_exprs.into_iter().next().unwrap()),
-                                Box::new(CoreExpr::Lit(CoreLit::Nil))
+                                Box::new(CoreExpr::Lit(CoreLit::Nil)),
                             );
-                            let io_list = CoreExpr::Call("io_lib".to_string(), "format".to_string(), vec![format_str, args_list]);
-                            CoreExpr::Call("lists".to_string(), "flatten".to_string(), vec![io_list])
+                            let io_list = CoreExpr::Call(
+                                "io_lib".to_string(),
+                                "format".to_string(),
+                                vec![format_str, args_list],
+                            );
+                            CoreExpr::Call(
+                                "lists".to_string(),
+                                "flatten".to_string(),
+                                vec![io_list],
+                            )
                         } else if name == "to_int" && arg_exprs.len() == 1 {
                             // to_int(string) -> list_to_integer(string)
-                            CoreExpr::Call("erlang".to_string(), "list_to_integer".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_integer".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "to_float" && arg_exprs.len() == 1 {
                             // to_float(string) -> list_to_float(string)
-                            CoreExpr::Call("erlang".to_string(), "list_to_float".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_float".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "to_atom" && arg_exprs.len() == 1 {
                             // to_atom(string) -> list_to_atom(string)
-                            CoreExpr::Call("erlang".to_string(), "list_to_atom".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_atom".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "fst" && arg_exprs.len() == 1 {
                             // fst(tuple) -> element(1, tuple)
-                            CoreExpr::Call("erlang".to_string(), "element".to_string(),
-                                vec![CoreExpr::Lit(CoreLit::Int(1)), arg_exprs.into_iter().next().unwrap()])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "element".to_string(),
+                                vec![
+                                    CoreExpr::Lit(CoreLit::Int(1)),
+                                    arg_exprs.into_iter().next().unwrap(),
+                                ],
+                            )
                         } else if name == "snd" && arg_exprs.len() == 1 {
                             // snd(tuple) -> element(2, tuple)
-                            CoreExpr::Call("erlang".to_string(), "element".to_string(),
-                                vec![CoreExpr::Lit(CoreLit::Int(2)), arg_exprs.into_iter().next().unwrap()])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "element".to_string(),
+                                vec![
+                                    CoreExpr::Lit(CoreLit::Int(2)),
+                                    arg_exprs.into_iter().next().unwrap(),
+                                ],
+                            )
                         } else if name == "size" && arg_exprs.len() == 1 {
                             // size(tuple) -> tuple_size(tuple)
-                            CoreExpr::Call("erlang".to_string(), "tuple_size".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "tuple_size".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "throw" && arg_exprs.len() == 1 {
                             // throw(term) -> erlang:throw(term)
                             CoreExpr::Call("erlang".to_string(), "throw".to_string(), arg_exprs)
@@ -466,7 +523,11 @@ impl Translator {
                             // div(a, b) -> erlang:div(a, b) (integer division)
                             CoreExpr::Call("erlang".to_string(), "div".to_string(), arg_exprs)
                         } else if name == "is_int" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "is_integer".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "is_integer".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "is_float" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "is_float".to_string(), arg_exprs)
                         } else if name == "is_number" && arg_exprs.len() == 1 {
@@ -480,14 +541,22 @@ impl Translator {
                         } else if name == "is_map" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "is_map".to_string(), arg_exprs)
                         } else if name == "is_bool" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "is_boolean".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "is_boolean".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "is_string" && arg_exprs.len() == 1 {
                             // In Erlang, strings are lists of integers
                             CoreExpr::Call("erlang".to_string(), "is_list".to_string(), arg_exprs)
                         } else if name == "is_pid" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "is_pid".to_string(), arg_exprs)
                         } else if name == "is_function" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "is_function".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "is_function".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "assert" && arg_exprs.len() == 1 {
                             // assert(cond) -> case cond of true -> ok; false -> error(assertion_failed)
                             let cond = arg_exprs.into_iter().next().unwrap();
@@ -495,15 +564,24 @@ impl Translator {
                                 Box::new(cond),
                                 vec![
                                     CoreClause {
-                                        patterns: vec![CorePattern::Lit(CoreLit::Atom("true".into()))],
+                                        patterns: vec![CorePattern::Lit(CoreLit::Atom(
+                                            "true".into(),
+                                        ))],
                                         guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
                                         body: CoreExpr::Lit(CoreLit::Atom("ok".into())),
                                     },
                                     CoreClause {
-                                        patterns: vec![CorePattern::Lit(CoreLit::Atom("false".into()))],
+                                        patterns: vec![CorePattern::Lit(CoreLit::Atom(
+                                            "false".into(),
+                                        ))],
                                         guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
-                                        body: CoreExpr::Call("erlang".into(), "error".into(),
-                                            vec![CoreExpr::Lit(CoreLit::Atom("assertion_failed".into()))]),
+                                        body: CoreExpr::Call(
+                                            "erlang".into(),
+                                            "error".into(),
+                                            vec![CoreExpr::Lit(CoreLit::Atom(
+                                                "assertion_failed".into(),
+                                            ))],
+                                        ),
                                     },
                                 ],
                             )
@@ -511,30 +589,41 @@ impl Translator {
                             // dbg(x) -> io:format("DBG: ~p~n", [x]), x
                             let x = arg_exprs.into_iter().next().unwrap();
                             let tmp = self.fresh_var();
-                            let format_str = CoreExpr::Lit(CoreLit::String("DBG: ~p~n".to_string()));
+                            let format_str =
+                                CoreExpr::Lit(CoreLit::String("DBG: ~p~n".to_string()));
                             let args_list = CoreExpr::Cons(
                                 Box::new(CoreExpr::Var(tmp.clone())),
-                                Box::new(CoreExpr::Lit(CoreLit::Nil))
+                                Box::new(CoreExpr::Lit(CoreLit::Nil)),
                             );
-                            let print_call = CoreExpr::Call("io".into(), "format".into(), vec![format_str, args_list]);
+                            let print_call = CoreExpr::Call(
+                                "io".into(),
+                                "format".into(),
+                                vec![format_str, args_list],
+                            );
                             CoreExpr::Let(
                                 vec![(tmp.clone(), x)],
                                 Box::new(CoreExpr::Seq(
                                     Box::new(print_call),
-                                    Box::new(CoreExpr::Var(tmp))
-                                ))
+                                    Box::new(CoreExpr::Var(tmp)),
+                                )),
                             )
                         } else if name == "sleep" && arg_exprs.len() == 1 {
                             // sleep(ms) -> timer:sleep(ms)
                             CoreExpr::Call("timer".to_string(), "sleep".to_string(), arg_exprs)
                         } else if name == "now" && arg_exprs.is_empty() {
                             // now() -> erlang:system_time(millisecond)
-                            CoreExpr::Call("erlang".to_string(), "system_time".to_string(),
-                                vec![CoreExpr::Lit(CoreLit::Atom("millisecond".into()))])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "system_time".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("millisecond".into()))],
+                            )
                         } else if name == "monotonic_time" && arg_exprs.is_empty() {
                             // monotonic_time() -> erlang:monotonic_time(millisecond)
-                            CoreExpr::Call("erlang".to_string(), "monotonic_time".to_string(),
-                                vec![CoreExpr::Lit(CoreLit::Atom("millisecond".into()))])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "monotonic_time".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("millisecond".into()))],
+                            )
                         } else if name == "random" && arg_exprs.is_empty() {
                             // random() -> rand:uniform()
                             CoreExpr::Call("rand".to_string(), "uniform".to_string(), vec![])
@@ -543,11 +632,18 @@ impl Translator {
                             CoreExpr::Call("rand".to_string(), "uniform".to_string(), arg_exprs)
                         } else if name == "random_seed" && arg_exprs.is_empty() {
                             // random_seed() -> rand:seed(exsss)
-                            CoreExpr::Call("rand".to_string(), "seed".to_string(),
-                                vec![CoreExpr::Lit(CoreLit::Atom("exsss".into()))])
+                            CoreExpr::Call(
+                                "rand".to_string(),
+                                "seed".to_string(),
+                                vec![CoreExpr::Lit(CoreLit::Atom("exsss".into()))],
+                            )
                         } else if name == "spawn_link" && arg_exprs.len() == 1 {
                             // spawn_link(fun) -> erlang:spawn_link(fun)
-                            CoreExpr::Call("erlang".to_string(), "spawn_link".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "spawn_link".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "link" && arg_exprs.len() == 1 {
                             // link(pid) -> erlang:link(pid)
                             CoreExpr::Call("erlang".to_string(), "link".to_string(), arg_exprs)
@@ -556,8 +652,14 @@ impl Translator {
                             CoreExpr::Call("erlang".to_string(), "unlink".to_string(), arg_exprs)
                         } else if name == "monitor" && arg_exprs.len() == 1 {
                             // monitor(pid) -> erlang:monitor(process, pid)
-                            CoreExpr::Call("erlang".to_string(), "monitor".to_string(),
-                                vec![CoreExpr::Lit(CoreLit::Atom("process".into())), arg_exprs.into_iter().next().unwrap()])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "monitor".to_string(),
+                                vec![
+                                    CoreExpr::Lit(CoreLit::Atom("process".into())),
+                                    arg_exprs.into_iter().next().unwrap(),
+                                ],
+                            )
                         } else if name == "demonitor" && arg_exprs.len() == 1 {
                             // demonitor(ref) -> erlang:demonitor(ref)
                             CoreExpr::Call("erlang".to_string(), "demonitor".to_string(), arg_exprs)
@@ -605,9 +707,13 @@ impl Translator {
                             CoreExpr::Call("string".to_string(), "replace".to_string(), args)
                         } else if name == "str_contains" && arg_exprs.len() == 2 {
                             // str_contains(s, sub) -> string:find(s, sub) != nomatch
-                            let find_call = CoreExpr::Call("string".to_string(), "find".to_string(), arg_exprs);
-                            CoreExpr::Call("erlang".to_string(), "/=".to_string(),
-                                vec![find_call, CoreExpr::Lit(CoreLit::Atom("nomatch".into()))])
+                            let find_call =
+                                CoreExpr::Call("string".to_string(), "find".to_string(), arg_exprs);
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "/=".to_string(),
+                                vec![find_call, CoreExpr::Lit(CoreLit::Atom("nomatch".into()))],
+                            )
                         } else if name == "str_starts_with" && arg_exprs.len() == 2 {
                             // str_starts_with(s, prefix) -> string:prefix(s, prefix)
                             CoreExpr::Call("string".to_string(), "prefix".to_string(), arg_exprs)
@@ -621,19 +727,37 @@ impl Translator {
                             let index_plus_1 = CoreExpr::Call(
                                 "erlang".to_string(),
                                 "+".to_string(),
-                                vec![args[1].clone(), CoreExpr::Lit(CoreLit::Int(1))]
+                                vec![args[1].clone(), CoreExpr::Lit(CoreLit::Int(1))],
                             );
-                            CoreExpr::Call("lists".to_string(), "nth".to_string(), vec![index_plus_1, args[0].clone()])
+                            CoreExpr::Call(
+                                "lists".to_string(),
+                                "nth".to_string(),
+                                vec![index_plus_1, args[0].clone()],
+                            )
                         } else if name == "str_ends_with" && arg_exprs.len() == 2 {
                             // str_ends_with(s, suffix) -> string:find(s, suffix, trailing) != nomatch
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            let find_call = CoreExpr::Call("string".to_string(), "find".to_string(),
-                                vec![args[0].clone(), args[1].clone(), CoreExpr::Lit(CoreLit::Atom("trailing".into()))]);
-                            CoreExpr::Call("erlang".to_string(), "/=".to_string(),
-                                vec![find_call, CoreExpr::Lit(CoreLit::Atom("nomatch".into()))])
+                            let find_call = CoreExpr::Call(
+                                "string".to_string(),
+                                "find".to_string(),
+                                vec![
+                                    args[0].clone(),
+                                    args[1].clone(),
+                                    CoreExpr::Lit(CoreLit::Atom("trailing".into())),
+                                ],
+                            );
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "/=".to_string(),
+                                vec![find_call, CoreExpr::Lit(CoreLit::Atom("nomatch".into()))],
+                            )
                         } else if name == "chars" && arg_exprs.len() == 1 {
                             // chars(s) -> string:to_graphemes(s)
-                            CoreExpr::Call("string".to_string(), "to_graphemes".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "string".to_string(),
+                                "to_graphemes".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "str_from_chars" && arg_exprs.len() == 1 {
                             // str_from_chars(list) -> list (identity in Erlang)
                             // In Erlang, a list of integers IS a string
@@ -641,7 +765,11 @@ impl Translator {
                         } else if name == "take" && arg_exprs.len() == 2 {
                             // take(n, list) -> lists:sublist(list, n)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("lists".to_string(), "sublist".to_string(), vec![args[1].clone(), args[0].clone()])
+                            CoreExpr::Call(
+                                "lists".to_string(),
+                                "sublist".to_string(),
+                                vec![args[1].clone(), args[0].clone()],
+                            )
                         } else if name == "drop" && arg_exprs.len() == 2 {
                             // drop(n, list) -> lists:nthtail(n, list)
                             CoreExpr::Call("lists".to_string(), "nthtail".to_string(), arg_exprs)
@@ -667,23 +795,35 @@ impl Translator {
                         } else if name == "map_put" && arg_exprs.len() == 3 {
                             // map_put(map, key, value) -> maps:put(key, value, map)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("maps".to_string(), "put".to_string(),
-                                vec![args[1].clone(), args[2].clone(), args[0].clone()])
+                            CoreExpr::Call(
+                                "maps".to_string(),
+                                "put".to_string(),
+                                vec![args[1].clone(), args[2].clone(), args[0].clone()],
+                            )
                         } else if name == "map_get" && arg_exprs.len() == 2 {
                             // map_get(map, key) -> maps:get(key, map)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("maps".to_string(), "get".to_string(),
-                                vec![args[1].clone(), args[0].clone()])
+                            CoreExpr::Call(
+                                "maps".to_string(),
+                                "get".to_string(),
+                                vec![args[1].clone(), args[0].clone()],
+                            )
                         } else if name == "map_get" && arg_exprs.len() == 3 {
                             // map_get(map, key, default) -> maps:get(key, map, default)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("maps".to_string(), "get".to_string(),
-                                vec![args[1].clone(), args[0].clone(), args[2].clone()])
+                            CoreExpr::Call(
+                                "maps".to_string(),
+                                "get".to_string(),
+                                vec![args[1].clone(), args[0].clone(), args[2].clone()],
+                            )
                         } else if name == "map_remove" && arg_exprs.len() == 2 {
                             // map_remove(map, key) -> maps:remove(key, map)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("maps".to_string(), "remove".to_string(),
-                                vec![args[1].clone(), args[0].clone()])
+                            CoreExpr::Call(
+                                "maps".to_string(),
+                                "remove".to_string(),
+                                vec![args[1].clone(), args[0].clone()],
+                            )
                         } else if name == "map_keys" && arg_exprs.len() == 1 {
                             // map_keys(map) -> maps:keys(map)
                             CoreExpr::Call("maps".to_string(), "keys".to_string(), arg_exprs)
@@ -693,8 +833,11 @@ impl Translator {
                         } else if name == "map_has_key" && arg_exprs.len() == 2 {
                             // map_has_key(map, key) -> maps:is_key(key, map)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("maps".to_string(), "is_key".to_string(),
-                                vec![args[1].clone(), args[0].clone()])
+                            CoreExpr::Call(
+                                "maps".to_string(),
+                                "is_key".to_string(),
+                                vec![args[1].clone(), args[0].clone()],
+                            )
                         } else if name == "map_merge" && arg_exprs.len() == 2 {
                             // map_merge(map1, map2) -> maps:merge(map1, map2)
                             CoreExpr::Call("maps".to_string(), "merge".to_string(), arg_exprs)
@@ -731,7 +874,11 @@ impl Translator {
                             CoreExpr::Call("file".to_string(), "get_cwd".to_string(), vec![])
                         } else if name == "argv" && arg_exprs.is_empty() {
                             // argv() -> init:get_plain_arguments()
-                            CoreExpr::Call("init".to_string(), "get_plain_arguments".to_string(), vec![])
+                            CoreExpr::Call(
+                                "init".to_string(),
+                                "get_plain_arguments".to_string(),
+                                vec![],
+                            )
                         } else if name == "env" && arg_exprs.len() == 1 {
                             // env(name) -> os:getenv(name)
                             CoreExpr::Call("os".to_string(), "getenv".to_string(), arg_exprs)
@@ -757,28 +904,50 @@ impl Translator {
                         } else if name == "elem" && arg_exprs.len() == 2 {
                             // elem(tuple, index) -> erlang:element(index, tuple) (1-based)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("erlang".to_string(), "element".to_string(),
-                                vec![args[1].clone(), args[0].clone()])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "element".to_string(),
+                                vec![args[1].clone(), args[0].clone()],
+                            )
                         } else if name == "set_elem" && arg_exprs.len() == 3 {
                             // set_elem(tuple, index, value) -> erlang:setelement(index, tuple, value)
                             let args: Vec<_> = arg_exprs.into_iter().collect();
-                            CoreExpr::Call("erlang".to_string(), "setelement".to_string(),
-                                vec![args[1].clone(), args[0].clone(), args[2].clone()])
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "setelement".to_string(),
+                                vec![args[1].clone(), args[0].clone(), args[2].clone()],
+                            )
                         } else if name == "tuple_to_list" && arg_exprs.len() == 1 {
                             // tuple_to_list(tuple) -> erlang:tuple_to_list(tuple)
-                            CoreExpr::Call("erlang".to_string(), "tuple_to_list".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "tuple_to_list".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "list_to_tuple" && arg_exprs.len() == 1 {
                             // list_to_tuple(list) -> erlang:list_to_tuple(list)
-                            CoreExpr::Call("erlang".to_string(), "list_to_tuple".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_tuple".to_string(),
+                                arg_exprs,
+                            )
                         // Binary functions
                         } else if name == "byte_size" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "byte_size".to_string(), arg_exprs)
                         } else if name == "bit_size" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "bit_size".to_string(), arg_exprs)
                         } else if name == "binary_to_list" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "binary_to_list".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "binary_to_list".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "list_to_binary" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "list_to_binary".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_binary".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "is_binary" && arg_exprs.len() == 1 {
                             CoreExpr::Call("erlang".to_string(), "is_binary".to_string(), arg_exprs)
                         // More utility functions
@@ -789,23 +958,59 @@ impl Translator {
                             // apply(mod, fun, args) -> erlang:apply(mod, fun, args)
                             CoreExpr::Call("erlang".to_string(), "apply".to_string(), arg_exprs)
                         } else if name == "atom_to_list" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "atom_to_list".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "atom_to_list".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "list_to_atom" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "list_to_atom".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_atom".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "integer_to_list" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "integer_to_list".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "integer_to_list".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "list_to_integer" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "list_to_integer".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_integer".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "float_to_list" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "float_to_list".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "float_to_list".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "list_to_float" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "list_to_float".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "list_to_float".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "iolist_to_binary" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "iolist_to_binary".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "iolist_to_binary".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "term_to_binary" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "term_to_binary".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "term_to_binary".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "binary_to_term" && arg_exprs.len() == 1 {
-                            CoreExpr::Call("erlang".to_string(), "binary_to_term".to_string(), arg_exprs)
+                            CoreExpr::Call(
+                                "erlang".to_string(),
+                                "binary_to_term".to_string(),
+                                arg_exprs,
+                            )
                         } else if name == "typeof" && arg_exprs.len() == 1 {
                             // typeof(x) -> returns atom describing type
                             let x = arg_exprs.into_iter().next().unwrap();
@@ -817,60 +1022,84 @@ impl Translator {
                                     vec![
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_integer".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_integer".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("integer".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_float".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_float".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("float".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_atom".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_atom".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("atom".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_list".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_list".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("list".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_tuple".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_tuple".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("tuple".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_map".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_map".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("map".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_pid".into(),
-                                                vec![CoreExpr::Var(tmp.clone())]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_pid".into(),
+                                                vec![CoreExpr::Var(tmp.clone())],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("pid".into())),
                                         },
                                         CoreClause {
                                             patterns: vec![CorePattern::Var("_".into())],
-                                            guard: CoreExpr::Call("erlang".into(), "is_function".into(),
-                                                vec![CoreExpr::Var(tmp)]),
+                                            guard: CoreExpr::Call(
+                                                "erlang".into(),
+                                                "is_function".into(),
+                                                vec![CoreExpr::Var(tmp)],
+                                            ),
                                             body: CoreExpr::Lit(CoreLit::Atom("function".into())),
                                         },
                                     ],
-                                ))
+                                )),
                             )
                         } else if self.lookup_function(name).is_some() {
                             // Local function call - use apply with local fun reference
                             CoreExpr::Apply(
                                 Box::new(CoreExpr::LocalFunRef(name.clone(), args.len())),
-                                arg_exprs
+                                arg_exprs,
                             )
                         } else {
                             // Could be a variable holding a function
@@ -885,7 +1114,12 @@ impl Translator {
                         let last = parts.last().unwrap();
 
                         // If the first part starts with uppercase, treat as enum constructor
-                        if first.chars().next().map(|c| c.is_uppercase()).unwrap_or(false) {
+                        if first
+                            .chars()
+                            .next()
+                            .map(|c| c.is_uppercase())
+                            .unwrap_or(false)
+                        {
                             // Enum constructor with args: Message::Get(pid) -> {get, pid}
                             let tag = to_snake_case(last);
                             let mut tuple_elems = vec![CoreExpr::Lit(CoreLit::Atom(tag))];
@@ -904,10 +1138,8 @@ impl Translator {
             }
 
             Expr::Lambda(params, _, body, _) => {
-                let param_names: Vec<String> = params
-                    .iter()
-                    .map(|p| self.to_core_var(&p.name))
-                    .collect();
+                let param_names: Vec<String> =
+                    params.iter().map(|p| self.to_core_var(&p.name)).collect();
                 let body_expr = self.translate_expr(body);
                 CoreExpr::Fun(param_names, Box::new(body_expr))
             }
@@ -944,9 +1176,9 @@ impl Translator {
                     })
                     .collect();
 
-                let timeout_expr = timeout.as_ref().map(|(ms, body)| {
-                    (self.translate_expr(ms), self.translate_expr(body))
-                });
+                let timeout_expr = timeout
+                    .as_ref()
+                    .map(|(ms, body)| (self.translate_expr(ms), self.translate_expr(body)));
 
                 CoreExpr::Receive {
                     clauses,
@@ -954,11 +1186,11 @@ impl Translator {
                 }
             }
 
-            Expr::SelfPid(_) => {
-                CoreExpr::Call("erlang".into(), "self".into(), vec![])
-            }
+            Expr::SelfPid(_) => CoreExpr::Call("erlang".into(), "self".into(), vec![]),
 
-            Expr::Try { body, catch_arms, .. } => {
+            Expr::Try {
+                body, catch_arms, ..
+            } => {
                 let translated_body = self.translate_expr(body);
                 let success_var = self.fresh_var();
                 let class_var = self.fresh_var();
@@ -1030,11 +1262,10 @@ impl Translator {
                 }
             }
 
-            Expr::Return(expr, _) => {
-                expr.as_ref()
-                    .map(|e| self.translate_expr(e))
-                    .unwrap_or(CoreExpr::Lit(CoreLit::Atom("ok".into())))
-            }
+            Expr::Return(expr, _) => expr
+                .as_ref()
+                .map(|e| self.translate_expr(e))
+                .unwrap_or(CoreExpr::Lit(CoreLit::Atom("ok".into()))),
 
             Expr::Index(container, key, _) => {
                 let container_expr = self.translate_expr(container);
@@ -1050,10 +1281,7 @@ impl Translator {
                 CoreExpr::Call(
                     "maps".into(),
                     "get".into(),
-                    vec![
-                        CoreExpr::Lit(CoreLit::Atom(field.clone())),
-                        obj_expr,
-                    ],
+                    vec![CoreExpr::Lit(CoreLit::Atom(field.clone())), obj_expr],
                 )
             }
 
@@ -1082,7 +1310,8 @@ impl Translator {
             }
 
             Expr::BitString(elements, _) => {
-                let elems: Vec<CoreExpr> = elements.iter().map(|e| self.translate_expr(e)).collect();
+                let elems: Vec<CoreExpr> =
+                    elements.iter().map(|e| self.translate_expr(e)).collect();
                 CoreExpr::Binary(elems)
             }
 
@@ -1112,9 +1341,11 @@ impl Translator {
                     })
                     .collect();
 
-                CoreExpr::Call("maps".into(), "from_list".into(), vec![
-                    self.build_list(entries)
-                ])
+                CoreExpr::Call(
+                    "maps".into(),
+                    "from_list".into(),
+                    vec![self.build_list(entries)],
+                )
             }
         }
     }
@@ -1160,24 +1391,25 @@ impl Translator {
             body
         } else {
             // Build nested lets/cases from inside out
-            result_parts.into_iter().rev().fold(body, |acc, (part, expr)| {
-                match part {
-                    LetPart::Simple(name) => {
-                        CoreExpr::Let(vec![(name, expr)], Box::new(acc))
+            result_parts
+                .into_iter()
+                .rev()
+                .fold(body, |acc, (part, expr)| {
+                    match part {
+                        LetPart::Simple(name) => CoreExpr::Let(vec![(name, expr)], Box::new(acc)),
+                        LetPart::Pattern(pattern) => {
+                            // Use case expression for pattern destructuring
+                            CoreExpr::Case(
+                                Box::new(expr),
+                                vec![CoreClause {
+                                    patterns: vec![pattern],
+                                    guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
+                                    body: acc,
+                                }],
+                            )
+                        }
                     }
-                    LetPart::Pattern(pattern) => {
-                        // Use case expression for pattern destructuring
-                        CoreExpr::Case(
-                            Box::new(expr),
-                            vec![CoreClause {
-                                patterns: vec![pattern],
-                                guard: CoreExpr::Lit(CoreLit::Atom("true".into())),
-                                body: acc,
-                            }],
-                        )
-                    }
-                }
-            })
+                })
         }
     }
 
@@ -1199,10 +1431,8 @@ impl Translator {
                 if pats.is_empty() {
                     return CorePattern::Lit(CoreLit::Atom("ok".into()));
                 }
-                let patterns: Vec<CorePattern> = pats
-                    .iter()
-                    .map(|p| self.translate_pattern(p))
-                    .collect();
+                let patterns: Vec<CorePattern> =
+                    pats.iter().map(|p| self.translate_pattern(p)).collect();
                 CorePattern::Tuple(patterns)
             }
 
@@ -1213,10 +1443,7 @@ impl Translator {
                     .unwrap_or(CorePattern::Nil);
 
                 pats.iter().rev().fold(tail_pat, |acc, pat| {
-                    CorePattern::Cons(
-                        Box::new(self.translate_pattern(pat)),
-                        Box::new(acc),
-                    )
+                    CorePattern::Cons(Box::new(self.translate_pattern(pat)), Box::new(acc))
                 })
             }
 
@@ -1260,10 +1487,12 @@ impl Translator {
     }
 
     fn build_list(&self, exprs: Vec<CoreExpr>) -> CoreExpr {
-        exprs.into_iter().rev().fold(
-            CoreExpr::Lit(CoreLit::Nil),
-            |acc, e| CoreExpr::Cons(Box::new(e), Box::new(acc)),
-        )
+        exprs
+            .into_iter()
+            .rev()
+            .fold(CoreExpr::Lit(CoreLit::Nil), |acc, e| {
+                CoreExpr::Cons(Box::new(e), Box::new(acc))
+            })
     }
 
     /// Translate a list comprehension to Core Erlang
@@ -1318,11 +1547,8 @@ impl Translator {
                 let mut combined_filter = self.translate_expr(&filters[0]);
                 for filter in &filters[1..] {
                     let f = self.translate_expr(filter);
-                    combined_filter = CoreExpr::Call(
-                        "erlang".into(),
-                        "and".into(),
-                        vec![combined_filter, f],
-                    );
+                    combined_filter =
+                        CoreExpr::Call("erlang".into(), "and".into(), vec![combined_filter, f]);
                 }
 
                 // case Filter of true -> [Expr]; false -> [] end
@@ -1357,7 +1583,13 @@ impl Translator {
                 && matches!(&generator.pattern, Pattern::Var(_, _));
 
             // Recurse for inner generators
-            let inner = self.translate_list_comp_inner(expr, generators, filters, gen_idx + 1, is_simple_map);
+            let inner = self.translate_list_comp_inner(
+                expr,
+                generators,
+                filters,
+                gen_idx + 1,
+                is_simple_map,
+            );
 
             if is_simple_map {
                 // Simple case: [expr for x in list] -> lists:map(fun(X) -> Expr end, List)

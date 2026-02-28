@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::syntax::ast::*;
 use crate::syntax::span::Span;
-use crate::types::env::{free_vars_in_type, TypeEnv};
+use crate::types::env::{TypeEnv, free_vars_in_type};
 use crate::types::types::{Scheme, Substitution, TyVar, Type, TypeId};
-use crate::types::unify::{unify, TypeError};
+use crate::types::unify::{TypeError, unify};
 
 pub struct InferenceContext {
     next_var: TyVar,
@@ -60,23 +60,49 @@ impl InferenceContext {
 
     /// Register a type definition
     /// If the type already exists, update it in place (keeping the same ID)
-    pub fn register_type(&mut self, name: String, params: Vec<String>, variants: Vec<(String, Vec<Type>)>) -> TypeId {
+    pub fn register_type(
+        &mut self,
+        name: String,
+        params: Vec<String>,
+        variants: Vec<(String, Vec<Type>)>,
+    ) -> TypeId {
         if let Some(existing) = self.type_defs.get(&name) {
             // Type already registered - update in place, keeping the same ID
             let id = existing.id;
-            self.type_defs.insert(name, TypeDef { id, params, variants });
+            self.type_defs.insert(
+                name,
+                TypeDef {
+                    id,
+                    params,
+                    variants,
+                },
+            );
             id
         } else {
             // New type - allocate a fresh ID
             let id = self.fresh_type_id();
-            self.type_defs.insert(name, TypeDef { id, params, variants });
+            self.type_defs.insert(
+                name,
+                TypeDef {
+                    id,
+                    params,
+                    variants,
+                },
+            );
             id
         }
     }
 
     /// Register an extern function with its type signature
     /// Key format: "module::name" (e.g., "lists::reverse")
-    pub fn register_extern_fn(&mut self, module: &str, name: &str, type_params: &[String], param_types: Vec<Type>, return_type: Type) {
+    pub fn register_extern_fn(
+        &mut self,
+        module: &str,
+        name: &str,
+        type_params: &[String],
+        param_types: Vec<Type>,
+        return_type: Type,
+    ) {
         let key = format!("{}::{}", module, name);
 
         // Collect type variables from type parameters
@@ -99,16 +125,35 @@ impl InferenceContext {
 
     /// Register a struct definition
     /// If the struct already exists, update it in place (keeping the same ID)
-    pub fn register_struct(&mut self, name: String, type_params: Vec<String>, fields: Vec<(String, Type)>) -> TypeId {
+    pub fn register_struct(
+        &mut self,
+        name: String,
+        type_params: Vec<String>,
+        fields: Vec<(String, Type)>,
+    ) -> TypeId {
         if let Some(existing) = self.struct_defs.get(&name) {
             // Struct already registered - update in place, keeping the same ID
             let type_id = existing.type_id;
-            self.struct_defs.insert(name, StructDef { type_id, type_params, fields });
+            self.struct_defs.insert(
+                name,
+                StructDef {
+                    type_id,
+                    type_params,
+                    fields,
+                },
+            );
             type_id
         } else {
             // New struct - allocate a fresh ID
             let type_id = self.fresh_type_id();
-            self.struct_defs.insert(name, StructDef { type_id, type_params, fields });
+            self.struct_defs.insert(
+                name,
+                StructDef {
+                    type_id,
+                    type_params,
+                    fields,
+                },
+            );
             type_id
         }
     }
@@ -120,11 +165,8 @@ impl InferenceContext {
 
     /// Instantiate a type scheme with fresh variables
     pub fn instantiate(&mut self, scheme: &Scheme) -> Type {
-        let mapping: HashMap<TyVar, Type> = scheme
-            .vars
-            .iter()
-            .map(|&v| (v, self.fresh_var()))
-            .collect();
+        let mapping: HashMap<TyVar, Type> =
+            scheme.vars.iter().map(|&v| (v, self.fresh_var())).collect();
         self.substitute_vars(&scheme.ty, &mapping)
     }
 
@@ -132,18 +174,30 @@ impl InferenceContext {
         match ty {
             Type::Var(v) => mapping.get(v).cloned().unwrap_or_else(|| ty.clone()),
             Type::Function(params, ret) => Type::Function(
-                params.iter().map(|p| self.substitute_vars(p, mapping)).collect(),
+                params
+                    .iter()
+                    .map(|p| self.substitute_vars(p, mapping))
+                    .collect(),
                 Box::new(self.substitute_vars(ret, mapping)),
             ),
-            Type::Tuple(ts) => Type::Tuple(ts.iter().map(|t| self.substitute_vars(t, mapping)).collect()),
+            Type::Tuple(ts) => Type::Tuple(
+                ts.iter()
+                    .map(|t| self.substitute_vars(t, mapping))
+                    .collect(),
+            ),
             Type::List(elem) => Type::List(Box::new(self.substitute_vars(elem, mapping))),
             Type::Record(fields) => Type::Record(
-                fields.iter().map(|(n, t)| (n.clone(), self.substitute_vars(t, mapping))).collect(),
+                fields
+                    .iter()
+                    .map(|(n, t)| (n.clone(), self.substitute_vars(t, mapping)))
+                    .collect(),
             ),
             Type::Named(id, name, args) => Type::Named(
                 *id,
                 name.clone(),
-                args.iter().map(|a| self.substitute_vars(a, mapping)).collect(),
+                args.iter()
+                    .map(|a| self.substitute_vars(a, mapping))
+                    .collect(),
             ),
             _ => ty.clone(),
         }
@@ -173,7 +227,11 @@ impl InferenceContext {
     }
 
     /// Convert a type expression to a type
-    pub fn type_expr_to_type(&mut self, expr: &TypeExpr, type_params: &HashMap<String, TyVar>) -> Result<Type, TypeError> {
+    pub fn type_expr_to_type(
+        &mut self,
+        expr: &TypeExpr,
+        type_params: &HashMap<String, TyVar>,
+    ) -> Result<Type, TypeError> {
         match expr {
             TypeExpr::Named(name, args, span) => {
                 // Check if it's a type parameter
@@ -203,7 +261,10 @@ impl InferenceContext {
                             // List without type param - use fresh var
                             Type::List(Box::new(self.fresh_var()))
                         } else {
-                            return Err(TypeError::UnboundType(format!("List expects 1 type argument, got {}", args.len()), *span));
+                            return Err(TypeError::UnboundType(
+                                format!("List expects 1 type argument, got {}", args.len()),
+                                *span,
+                            ));
                         }
                     }
                     "Map" => {
@@ -215,7 +276,10 @@ impl InferenceContext {
                         } else if args.is_empty() {
                             Type::Map(Box::new(self.fresh_var()), Box::new(self.fresh_var()))
                         } else {
-                            return Err(TypeError::UnboundType(format!("Map expects 2 type arguments, got {}", args.len()), *span));
+                            return Err(TypeError::UnboundType(
+                                format!("Map expects 2 type arguments, got {}", args.len()),
+                                *span,
+                            ));
                         }
                     }
                     _ => {
@@ -286,12 +350,10 @@ impl InferenceContext {
             Expr::Atom(_, _) => Ok(Type::Atom),
             Expr::Unit(_) => Ok(Type::Unit),
 
-            Expr::Var(name, span) => {
-                match env.lookup(name) {
-                    Some(scheme) => Ok(self.instantiate(scheme)),
-                    None => Err(TypeError::UnboundVariable(name.clone(), *span)),
-                }
-            }
+            Expr::Var(name, span) => match env.lookup(name) {
+                Some(scheme) => Ok(self.instantiate(scheme)),
+                None => Err(TypeError::UnboundVariable(name.clone(), *span)),
+            },
 
             Expr::Tuple(exprs, _) => {
                 let types: Vec<Type> = exprs
@@ -337,7 +399,12 @@ impl InferenceContext {
                 Ok(Type::List(Box::new(Type::Int)))
             }
 
-            Expr::ListComp { expr, generators, filters, span } => {
+            Expr::ListComp {
+                expr,
+                generators,
+                filters,
+                span,
+            } => {
                 let mut local_env = env.clone();
 
                 // Process generators - each binds variables
@@ -345,9 +412,17 @@ impl InferenceContext {
                     let source_type = self.infer_expr(&local_env, &generator.source)?;
                     // Expect source to be a list
                     let elem_type = self.fresh_var();
-                    self.unify(&source_type, &Type::List(Box::new(elem_type.clone())), *span)?;
+                    self.unify(
+                        &source_type,
+                        &Type::List(Box::new(elem_type.clone())),
+                        *span,
+                    )?;
                     // Bind pattern variables with the element type
-                    self.bind_pattern_vars(&mut local_env, &generator.pattern, &self.apply(&elem_type));
+                    self.bind_pattern_vars(
+                        &mut local_env,
+                        &generator.pattern,
+                        &self.apply(&elem_type),
+                    );
                 }
 
                 // Check filters are boolean
@@ -460,7 +535,11 @@ impl InferenceContext {
                             }
 
                             // Extract variables from pattern and add to environment
-                            self.bind_pattern_vars(&mut local_env, pattern, &self.apply(&init_type));
+                            self.bind_pattern_vars(
+                                &mut local_env,
+                                pattern,
+                                &self.apply(&init_type),
+                            );
                         }
                         Stmt::Expr(e) => {
                             self.infer_expr(&local_env, e)?;
@@ -534,7 +613,11 @@ impl InferenceContext {
                 Ok(msg_type)
             }
 
-            Expr::Receive { arms, timeout, span } => {
+            Expr::Receive {
+                arms,
+                timeout,
+                span,
+            } => {
                 let result_type = self.fresh_var();
                 for arm in arms {
                     // TODO: proper pattern typing
@@ -583,7 +666,11 @@ impl InferenceContext {
                 Ok(Type::Any)
             }
 
-            Expr::Try { body, catch_arms, span } => {
+            Expr::Try {
+                body,
+                catch_arms,
+                span,
+            } => {
                 let body_type = self.infer_expr(env, body)?;
 
                 // Each catch arm should return the same type as body
@@ -621,20 +708,23 @@ impl InferenceContext {
                         for (variant_name, fields) in &type_def.variants {
                             if variant_name == name {
                                 // Create constructor type
-                                let type_args: Vec<Type> = type_def.params.iter()
-                                    .map(|_| self.fresh_var())
-                                    .collect();
-                                let result_type = Type::Named(type_def.id, module.clone(), type_args.clone());
+                                let type_args: Vec<Type> =
+                                    type_def.params.iter().map(|_| self.fresh_var()).collect();
+                                let result_type =
+                                    Type::Named(type_def.id, module.clone(), type_args.clone());
 
                                 if fields.is_empty() {
                                     return Ok(result_type);
                                 } else {
                                     // Substitute type params in field types
-                                    let mapping: HashMap<TyVar, Type> = type_def.params.iter()
+                                    let mapping: HashMap<TyVar, Type> = type_def
+                                        .params
+                                        .iter()
                                         .enumerate()
                                         .map(|(i, _)| (i as TyVar, type_args[i].clone()))
                                         .collect();
-                                    let field_types: Vec<Type> = fields.iter()
+                                    let field_types: Vec<Type> = fields
+                                        .iter()
                                         .map(|f| self.substitute_vars(f, &mapping))
                                         .collect();
                                     return Ok(Type::Function(field_types, Box::new(result_type)));
@@ -655,7 +745,11 @@ impl InferenceContext {
                 for arm in arms {
                     // Create environment with pattern bindings
                     let mut arm_env = env.clone();
-                    self.bind_pattern_vars(&mut arm_env, &arm.pattern, &self.apply(&scrutinee_type));
+                    self.bind_pattern_vars(
+                        &mut arm_env,
+                        &arm.pattern,
+                        &self.apply(&scrutinee_type),
+                    );
 
                     // Check guard if present
                     if let Some(guard) = &arm.guard {
@@ -675,12 +769,16 @@ impl InferenceContext {
                 // Look up struct definition
                 if let Some(struct_def) = self.struct_defs.get(name).cloned() {
                     // Create fresh type variables for type parameters
-                    let type_args: Vec<Type> = struct_def.type_params.iter()
+                    let type_args: Vec<Type> = struct_def
+                        .type_params
+                        .iter()
                         .map(|_| self.fresh_var())
                         .collect();
 
                     // Build substitution from type params to fresh vars
-                    let mapping: HashMap<TyVar, Type> = struct_def.type_params.iter()
+                    let mapping: HashMap<TyVar, Type> = struct_def
+                        .type_params
+                        .iter()
                         .enumerate()
                         .map(|(i, _)| (i as TyVar, type_args[i].clone()))
                         .collect();
@@ -690,8 +788,8 @@ impl InferenceContext {
                         let expr_type = self.infer_expr(env, field_expr)?;
 
                         // Find the expected field type
-                        if let Some((_, expected_type)) = struct_def.fields.iter()
-                            .find(|(n, _)| n == field_name)
+                        if let Some((_, expected_type)) =
+                            struct_def.fields.iter().find(|(n, _)| n == field_name)
                         {
                             let expected = self.substitute_vars(expected_type, &mapping);
                             self.unify(&expr_type, &expected, *span)?;
@@ -726,9 +824,19 @@ impl InferenceContext {
                 if let Type::Named(_, struct_name, type_args) = &applied {
                     if let Some(struct_def) = self.struct_defs.get(struct_name).cloned() {
                         // Build substitution
-                        let mapping: HashMap<TyVar, Type> = struct_def.type_params.iter()
+                        let mapping: HashMap<TyVar, Type> = struct_def
+                            .type_params
+                            .iter()
                             .enumerate()
-                            .map(|(i, _)| (i as TyVar, type_args.get(i).cloned().unwrap_or_else(|| self.fresh_var())))
+                            .map(|(i, _)| {
+                                (
+                                    i as TyVar,
+                                    type_args
+                                        .get(i)
+                                        .cloned()
+                                        .unwrap_or_else(|| self.fresh_var()),
+                                )
+                            })
                             .collect();
 
                         for (name, ty) in &struct_def.fields {
@@ -780,7 +888,8 @@ impl InferenceContext {
             }
 
             Expr::Record(fields, _span) => {
-                let field_types: Vec<(String, Type)> = fields.iter()
+                let field_types: Vec<(String, Type)> = fields
+                    .iter()
                     .map(|(name, expr)| {
                         let ty = self.infer_expr(env, expr)?;
                         Ok((name.clone(), ty))
@@ -805,7 +914,12 @@ impl InferenceContext {
     }
 
     /// Bind variables from a pattern to the environment with appropriate types
-    fn bind_pattern_vars(&mut self, env: &mut TypeEnv, pattern: &crate::syntax::ast::Pattern, ty: &Type) {
+    fn bind_pattern_vars(
+        &mut self,
+        env: &mut TypeEnv,
+        pattern: &crate::syntax::ast::Pattern,
+        ty: &Type,
+    ) {
         use crate::syntax::ast::Pattern;
 
         // Apply substitution to resolve type variables

@@ -171,16 +171,16 @@ pub enum Expr {
     Tuple(Vec<Expr>, Span),
     List(Vec<Expr>, Option<Box<Expr>>, Span), // [a, b | tail]
     ListComp {
-        expr: Box<Expr>,                    // the expression to evaluate
-        generators: Vec<Generator>,          // for x in list, y in list2
-        filters: Vec<Expr>,                  // if conditions
+        expr: Box<Expr>,            // the expression to evaluate
+        generators: Vec<Generator>, // for x in list, y in list2
+        filters: Vec<Expr>,         // if conditions
         span: Span,
     },
     Range(Box<Expr>, Box<Expr>, bool, Span), // start..end or start..=end (bool is inclusive)
     Map(Vec<(Expr, Expr)>, Span),            // %{key => value, ...}
     Record(Vec<(Ident, Expr)>, Span),
     StructInit(Ident, Vec<(Ident, Expr)>, Span), // Point { x: 1, y: 2 }
-    BitString(Vec<Expr>, Span),              // <<1, 2, 3>> or <<"hello">>
+    BitString(Vec<Expr>, Span),                  // <<1, 2, 3>> or <<"hello">>
 
     // Operations
     Binary(Box<Expr>, BinOp, Box<Expr>, Span),
@@ -200,7 +200,7 @@ pub enum Expr {
     // Field/variant access
     Field(Box<Expr>, Ident, Span),
     Index(Box<Expr>, Box<Expr>, Span), // expr[key] - map/list access
-    Path(Vec<Ident>, Span), // Foo::Bar::Baz
+    Path(Vec<Ident>, Span),            // Foo::Bar::Baz
 
     // Process primitives
     Spawn(Box<Expr>, Span),
@@ -226,7 +226,7 @@ pub enum Expr {
 /// A catch clause: class:pattern => body
 #[derive(Debug, Clone)]
 pub struct CatchArm {
-    pub class: Option<Ident>,  // error, throw, exit (or None for any)
+    pub class: Option<Ident>, // error, throw, exit (or None for any)
     pub pattern: Pattern,
     pub body: Expr,
     pub span: Span,

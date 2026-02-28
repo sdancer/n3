@@ -27,7 +27,7 @@ pub enum TokenKind {
     Char(char),
     String(String),
     InterpolatedString(Vec<StringPart>), // "hello ${name}!"
-    Atom(String),      // :name
+    Atom(String),                        // :name
     Bool(bool),
 
     // Identifiers
@@ -50,12 +50,12 @@ pub enum TokenKind {
     Spawn,
     Send,
     Receive,
-    After,    // after (for receive timeout)
-    For,      // for (list comprehension)
-    In,       // in (list comprehension)
-    Try,      // try
-    Catch,    // catch
-    SelfKw,   // self
+    After,  // after (for receive timeout)
+    For,    // for (list comprehension)
+    In,     // in (list comprehension)
+    Try,    // try
+    Catch,  // catch
+    SelfKw, // self
     Extern,
     Return,
     Pub,
@@ -87,18 +87,18 @@ pub enum TokenKind {
     Colon2,    // ::
 
     // Delimiters
-    LParen,    // (
-    RParen,    // )
-    LBrace,    // {
-    RBrace,    // }
-    LBracket,  // [
-    RBracket,  // ]
-    Comma,     // ,
-    Colon,     // :
-    Semi,      // ;
-    Dot,       // .
-    DotDot,    // .. (range exclusive)
-    DotDotEq,  // ..= (range inclusive)
+    LParen,   // (
+    RParen,   // )
+    LBrace,   // {
+    RBrace,   // }
+    LBracket, // [
+    RBracket, // ]
+    Comma,    // ,
+    Colon,    // :
+    Semi,     // ;
+    Dot,      // .
+    DotDot,   // .. (range exclusive)
+    DotDotEq, // ..= (range inclusive)
 
     // Special
     Eof,

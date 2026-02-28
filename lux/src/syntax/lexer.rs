@@ -285,7 +285,9 @@ impl<'a> Lexer<'a> {
                     Some((_, '\\')) => '\\',
                     Some((_, '\'')) => '\'',
                     Some((_, '0')) => '\0',
-                    Some((_, c)) => return TokenKind::Error(format!("Invalid char escape: \\{}", c)),
+                    Some((_, c)) => {
+                        return TokenKind::Error(format!("Invalid char escape: \\{}", c));
+                    }
                     None => return TokenKind::Error("Unterminated char literal".into()),
                 }
             }
@@ -323,7 +325,7 @@ impl<'a> Lexer<'a> {
                         Some((_, '"')) => current.push('"'),
                         Some((_, '$')) => current.push('$'), // escape interpolation
                         Some((_, ch)) => {
-                            return TokenKind::Error(format!("Invalid escape: \\{}", ch))
+                            return TokenKind::Error(format!("Invalid escape: \\{}", ch));
                         }
                         None => return TokenKind::Error("Unterminated string".into()),
                     }
@@ -383,7 +385,10 @@ impl<'a> Lexer<'a> {
                 Some('{') => {
                     self.advance();
                     brace_depth += 1;
-                    tokens.push(Token::new(TokenKind::LBrace, Span::new(start as u32, self.pos as u32)));
+                    tokens.push(Token::new(
+                        TokenKind::LBrace,
+                        Span::new(start as u32, self.pos as u32),
+                    ));
                 }
                 Some('}') => {
                     self.advance();
@@ -391,22 +396,58 @@ impl<'a> Lexer<'a> {
                     if brace_depth == 0 {
                         break;
                     }
-                    tokens.push(Token::new(TokenKind::RBrace, Span::new(start as u32, self.pos as u32)));
+                    tokens.push(Token::new(
+                        TokenKind::RBrace,
+                        Span::new(start as u32, self.pos as u32),
+                    ));
                 }
                 Some(ch) => {
                     // Lex a single token
                     let kind = match ch {
-                        '(' => { self.advance(); TokenKind::LParen }
-                        ')' => { self.advance(); TokenKind::RParen }
-                        '[' => { self.advance(); TokenKind::LBracket }
-                        ']' => { self.advance(); TokenKind::RBracket }
-                        ',' => { self.advance(); TokenKind::Comma }
-                        '.' => { self.advance(); TokenKind::Dot }
-                        '+' => { self.advance(); TokenKind::Plus }
-                        '-' => { self.advance(); TokenKind::Minus }
-                        '*' => { self.advance(); TokenKind::Star }
-                        '/' => { self.advance(); TokenKind::Slash }
-                        '%' => { self.advance(); TokenKind::Percent }
+                        '(' => {
+                            self.advance();
+                            TokenKind::LParen
+                        }
+                        ')' => {
+                            self.advance();
+                            TokenKind::RParen
+                        }
+                        '[' => {
+                            self.advance();
+                            TokenKind::LBracket
+                        }
+                        ']' => {
+                            self.advance();
+                            TokenKind::RBracket
+                        }
+                        ',' => {
+                            self.advance();
+                            TokenKind::Comma
+                        }
+                        '.' => {
+                            self.advance();
+                            TokenKind::Dot
+                        }
+                        '+' => {
+                            self.advance();
+                            TokenKind::Plus
+                        }
+                        '-' => {
+                            self.advance();
+                            TokenKind::Minus
+                        }
+                        '*' => {
+                            self.advance();
+                            TokenKind::Star
+                        }
+                        '/' => {
+                            self.advance();
+                            TokenKind::Slash
+                        }
+                        '%' => {
+                            self.advance();
+                            TokenKind::Percent
+                        }
                         ':' => {
                             self.advance();
                             if self.peek_char() == Some(':') {
@@ -454,7 +495,11 @@ impl<'a> Lexer<'a> {
                 // Look ahead to ensure it's a decimal, not a method call
                 let mut temp = self.chars.clone();
                 temp.next();
-                if temp.peek().map(|(_, c)| c.is_ascii_digit()).unwrap_or(false) {
+                if temp
+                    .peek()
+                    .map(|(_, c)| c.is_ascii_digit())
+                    .unwrap_or(false)
+                {
                     is_float = true;
                     num_str.push(ch);
                     self.advance();

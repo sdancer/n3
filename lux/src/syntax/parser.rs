@@ -2,11 +2,23 @@ use crate::syntax::ast::{CatchArm, Generator, *};
 use crate::syntax::span::Span;
 use crate::syntax::token::{StringPart, Token, TokenKind};
 
+#[derive(Debug, Clone, Copy)]
+pub struct ParserOptions {
+    pub allow_extern: bool,
+}
+
+impl Default for ParserOptions {
+    fn default() -> Self {
+        Self { allow_extern: true }
+    }
+}
+
 pub struct Parser {
     tokens: Vec<Token>,
     pos: usize,
     /// True if we just skipped a newline
     after_newline: bool,
+    options: ParserOptions,
 }
 
 pub type ParseResult<T> = Result<T, ParseError>;
@@ -28,13 +40,25 @@ impl ParseError {
 
 impl Parser {
     pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0, after_newline: false }
+        Self::new_with_options(tokens, ParserOptions::default())
+    }
+
+    pub fn new_with_options(tokens: Vec<Token>, options: ParserOptions) -> Self {
+        Parser {
+            tokens,
+            pos: 0,
+            after_newline: false,
+            options,
+        }
     }
 
     /// Skip any newline tokens and track if we saw one
     fn skip_newlines(&mut self) {
         self.after_newline = false;
-        while matches!(self.tokens.get(self.pos).map(|t| &t.kind), Some(TokenKind::Newline)) {
+        while matches!(
+            self.tokens.get(self.pos).map(|t| &t.kind),
+            Some(TokenKind::Newline)
+        ) {
             self.pos += 1;
             self.after_newline = true;
         }
@@ -68,7 +92,13 @@ impl Parser {
             TokenKind::Type => self.parse_type_alias().map(Item::TypeAlias),
             TokenKind::Enum => self.parse_enum().map(Item::Enum),
             TokenKind::Struct => self.parse_struct().map(Item::Struct),
-            TokenKind::Extern => self.parse_extern().map(Item::Extern),
+            TokenKind::Extern => {
+                if !self.options.allow_extern {
+                    Err(self.error("`external` declarations are disabled in sandbox mode"))
+                } else {
+                    self.parse_extern().map(Item::Extern)
+                }
+            }
             TokenKind::Use => self.parse_use().map(Item::Use),
             _ => Err(self.error("Expected fn, type, enum, struct, use, or extern")),
         }
@@ -249,7 +279,11 @@ impl Parser {
             Vec::new()
         };
 
-        Ok(TypeExpr::Named(name, type_args, start.merge(self.prev_span())))
+        Ok(TypeExpr::Named(
+            name,
+            type_args,
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_type_alias(&mut self) -> ParseResult<TypeAlias> {
@@ -465,7 +499,11 @@ impl Parser {
         }
         self.expect(&TokenKind::RBrace)?;
 
-        Ok(Expr::Block(stmts, final_expr, start.merge(self.prev_span())))
+        Ok(Expr::Block(
+            stmts,
+            final_expr,
+            start.merge(self.prev_span()),
+        ))
     }
 
     fn parse_let_stmt(&mut self) -> ParseResult<Stmt> {
@@ -567,7 +605,12 @@ impl Parser {
         self.advance();
         let right = self.parse_additive_expr()?;
         let span = left.span().merge(right.span());
-        Ok(Expr::Range(Box::new(left), Box::new(right), inclusive, span))
+        Ok(Expr::Range(
+            Box::new(left),
+            Box::new(right),
+            inclusive,
+            span,
+        ))
     }
 
     fn parse_additive_expr(&mut self) -> ParseResult<Expr> {
@@ -685,7 +728,11 @@ impl Parser {
                 self.advance();
                 let index = self.parse_expr()?;
                 self.expect(&TokenKind::RBracket)?;
-                expr = Expr::Index(Box::new(expr), Box::new(index), start.merge(self.prev_span()));
+                expr = Expr::Index(
+                    Box::new(expr),
+                    Box::new(index),
+                    start.merge(self.prev_span()),
+                );
             } else {
                 break;
             }
@@ -731,7 +778,10 @@ impl Parser {
             TokenKind::InterpolatedString(parts) => {
                 self.advance();
                 let ast_parts = self.parse_interpolated_parts(parts)?;
-                Ok(Expr::InterpolatedString(ast_parts, start.merge(self.prev_span())))
+                Ok(Expr::InterpolatedString(
+                    ast_parts,
+                    start.merge(self.prev_span()),
+                ))
             }
             TokenKind::Bool(b) => {
                 self.advance();
@@ -770,7 +820,11 @@ impl Parser {
                         self.advance();
                     }
                     self.expect(&TokenKind::RBrace)?;
-                    Ok(Expr::StructInit(name, fields, start.merge(self.prev_span())))
+                    Ok(Expr::StructInit(
+                        name,
+                        fields,
+                        start.merge(self.prev_span()),
+                    ))
                 } else {
                     Ok(Expr::Var(name, start))
                 }
@@ -1125,7 +1179,11 @@ impl Parser {
                 self.advance();
                 if self.check(&TokenKind::RBracket) {
                     self.advance();
-                    return Ok(Pattern::List(Vec::new(), None, start.merge(self.prev_span())));
+                    return Ok(Pattern::List(
+                        Vec::new(),
+                        None,
+                        start.merge(self.prev_span()),
+                    ));
                 }
                 let mut patterns = vec![self.parse_pattern()?];
                 while self.check(&TokenKind::Comma) {
@@ -1241,7 +1299,9 @@ impl Parser {
                     // It was class:pattern
                     let class_name = match &first {
                         Pattern::Var(name, _) => name.clone(),
-                        _ => return Err(self.error("Expected exception class (error, throw, exit)")),
+                        _ => {
+                            return Err(self.error("Expected exception class (error, throw, exit)"));
+                        }
                     };
                     let pattern = self.parse_pattern()?;
                     (Some(class_name), pattern)
@@ -1349,7 +1409,10 @@ impl Parser {
         })
     }
 
-    fn parse_interpolated_parts(&mut self, parts: Vec<StringPart>) -> ParseResult<Vec<InterpolatedPart>> {
+    fn parse_interpolated_parts(
+        &mut self,
+        parts: Vec<StringPart>,
+    ) -> ParseResult<Vec<InterpolatedPart>> {
         let mut result = Vec::new();
         for part in parts {
             match part {
@@ -1529,5 +1592,25 @@ mod tests {
         )
         .unwrap();
         assert_eq!(module.items.len(), 1);
+    }
+
+    #[test]
+    fn test_extern_rejected_when_disabled() {
+        let tokens = Lexer::new(
+            r#"
+            extern "erlang" {
+                fn lists::reverse(List<Int>) -> List<Int>
+            }
+            "#,
+        )
+        .tokenize();
+        let mut parser = Parser::new_with_options(
+            tokens,
+            ParserOptions {
+                allow_extern: false,
+            },
+        );
+        let err = parser.parse_module().unwrap_err();
+        assert!(err.message.contains("disabled in sandbox mode"));
     }
 }
