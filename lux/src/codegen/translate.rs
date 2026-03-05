@@ -1,5 +1,6 @@
 use crate::codegen::erlang::*;
 use crate::syntax::ast::{self, Expr, InterpolatedPart, Item, Module, Pattern, Stmt};
+use crate::syntax::content_address;
 
 /// Helper enum for let binding types
 #[derive(Debug)]
@@ -27,8 +28,32 @@ fn to_snake_case(s: &str) -> String {
 pub struct Translator {
     var_counter: u32,
     module_name: String,
-    /// Track function names and arities for local calls
-    functions: Vec<(String, usize)>,
+    /// Track source/local function symbols and their content-addressed modules.
+    functions: Vec<LocalFunctionSymbol>,
+}
+
+#[derive(Debug, Clone)]
+struct LocalFunctionSymbol {
+    source_name: String,
+    module_hash: String,
+    module_name: String,
+    arity: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct FunctionModuleMetadata {
+    pub source_name: String,
+    pub module_name: String,
+    pub module_hash: String,
+    pub arity: usize,
+}
+
+#[derive(Debug, Clone)]
+pub struct TranslatedFunctionModules {
+    pub modules: Vec<CoreModule>,
+    pub metadata: Vec<FunctionModuleMetadata>,
+    pub entry_module: Option<String>,
+    pub entry_arity: Option<usize>,
 }
 
 impl Translator {
@@ -47,61 +72,87 @@ impl Translator {
     }
 
     pub fn translate_module(&mut self, module: &Module) -> CoreModule {
+        let translated = self.translate_function_modules(module);
+        if translated.modules.is_empty() {
+            CoreModule {
+                name: self.module_name.clone(),
+                exports: vec![],
+                functions: vec![],
+            }
+        } else {
+            translated.modules[0].clone()
+        }
+    }
+
+    pub fn translate_function_modules(&mut self, module: &Module) -> TranslatedFunctionModules {
         self.module_name = module.name.clone().unwrap_or_else(|| "main".to_string());
 
-        // First pass: collect all function names and arities
         self.functions.clear();
         for item in &module.items {
             if let Item::Function(func) = item {
-                self.functions.push((func.name.clone(), func.params.len()));
+                let function_hash = content_address::hash_function_ast(func);
+                self.functions.push(LocalFunctionSymbol {
+                    source_name: func.name.clone(),
+                    module_hash: function_hash.clone(),
+                    module_name: function_hash,
+                    arity: func.params.len(),
+                });
             }
         }
 
-        let mut functions = Vec::new();
-        let mut exports = Vec::new();
+        let mut modules = Vec::new();
+        let mut metadata = Vec::new();
+        let mut entry_module = None;
+        let mut entry_arity = None;
 
         for item in &module.items {
             match item {
                 Item::Function(func) => {
-                    let core_func = self.translate_function(func);
-                    exports.push((func.name.clone(), func.params.len()));
-                    functions.push(core_func);
+                    let symbol = self
+                        .lookup_function_symbol(&func.name, func.params.len())
+                        .expect("function symbol must exist from first pass")
+                        .clone();
+                    let core_func = self.translate_function(func, "apply");
+                    modules.push(CoreModule {
+                        name: symbol.module_name.clone(),
+                        exports: vec![("apply".to_string(), func.params.len())],
+                        functions: vec![core_func],
+                    });
+                    metadata.push(FunctionModuleMetadata {
+                        source_name: symbol.source_name.clone(),
+                        module_name: symbol.module_name.clone(),
+                        module_hash: symbol.module_hash.clone(),
+                        arity: symbol.arity,
+                    });
+
+                    if symbol.source_name == "main" && symbol.arity == 0 {
+                        entry_module = Some(symbol.module_name.clone());
+                        entry_arity = Some(0);
+                    }
                 }
-                Item::Enum(_) => {
-                    // Enums don't generate code directly - they're just type info
-                }
-                Item::Struct(_) => {
-                    // Structs don't generate code directly - they're just type info
-                }
-                Item::TypeAlias(_) => {
-                    // Type aliases don't generate code
-                }
-                Item::Extern(_) => {
-                    // External declarations don't generate code
-                }
-                Item::Use(_) => {
-                    // Use declarations are resolved at compile time
-                    // They inform function resolution but don't generate code
-                }
+                Item::Enum(_)
+                | Item::Struct(_)
+                | Item::TypeAlias(_)
+                | Item::Extern(_)
+                | Item::Use(_) => {}
             }
         }
 
-        CoreModule {
-            name: self.module_name.clone(),
-            exports,
-            functions,
+        TranslatedFunctionModules {
+            modules,
+            metadata,
+            entry_module,
+            entry_arity,
         }
     }
 
-    /// Check if a name is a local function and return its arity
-    fn lookup_function(&self, name: &str) -> Option<usize> {
+    fn lookup_function_symbol(&self, name: &str, arity: usize) -> Option<&LocalFunctionSymbol> {
         self.functions
             .iter()
-            .find(|(n, _)| n == name)
-            .map(|(_, arity)| *arity)
+            .find(|symbol| symbol.source_name == name && symbol.arity == arity)
     }
 
-    fn translate_function(&mut self, func: &ast::Function) -> CoreFunDef {
+    fn translate_function(&mut self, func: &ast::Function, addressed_name: &str) -> CoreFunDef {
         // Generate parameter names
         let params: Vec<String> = func
             .params
@@ -112,7 +163,7 @@ impl Translator {
         let body = self.translate_expr(&func.body);
 
         CoreFunDef {
-            name: func.name.clone(),
+            name: addressed_name.to_string(),
             arity: func.params.len(),
             params,
             body,
@@ -242,9 +293,13 @@ impl Translator {
                                     _ => ("lists", name.as_str()),
                                 };
                                 return CoreExpr::Call(module.into(), func.into(), vec![l]);
-                            } else if self.lookup_function(name).is_some() {
+                            } else if let Some(symbol) = self.lookup_function_symbol(name, 1) {
                                 return CoreExpr::Apply(
-                                    Box::new(CoreExpr::LocalFunRef(name.clone(), 1)),
+                                    Box::new(CoreExpr::RemoteFunRef(
+                                        symbol.module_name.clone(),
+                                        "apply".to_string(),
+                                        1,
+                                    )),
                                     vec![l],
                                 );
                             }
@@ -1095,12 +1150,9 @@ impl Translator {
                                     ],
                                 )),
                             )
-                        } else if self.lookup_function(name).is_some() {
-                            // Local function call - use apply with local fun reference
-                            CoreExpr::Apply(
-                                Box::new(CoreExpr::LocalFunRef(name.clone(), args.len())),
-                                arg_exprs,
-                            )
+                        } else if let Some(symbol) = self.lookup_function_symbol(name, args.len()) {
+                            // Local function call - call content-addressed module's apply/N.
+                            CoreExpr::Call(symbol.module_name.clone(), "apply".into(), arg_exprs)
                         } else {
                             // Could be a variable holding a function
                             let func_expr = self.translate_expr(func);

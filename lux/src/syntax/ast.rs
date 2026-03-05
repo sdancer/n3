@@ -10,6 +10,12 @@ pub struct Module {
     pub span: Span,
 }
 
+impl Function {
+    pub fn content_hash(&self) -> String {
+        crate::syntax::content_address::hash_function_ast(self)
+    }
+}
+
 /// Top-level items
 #[derive(Debug, Clone)]
 pub enum Item {

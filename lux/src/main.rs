@@ -135,33 +135,53 @@ fn main() {
     });
 
     let mut translator = Translator::new();
-    let core_module = translator.translate_module(&module);
-
-    let mut emitter = Emitter::new();
-    let core_source = emitter.emit_module(&core_module);
-
-    let core_filename = format!("{}.core", module_name);
-    if let Err(e) = fs::write(&core_filename, &core_source) {
-        eprintln!("Error writing {}: {}", core_filename, e);
+    let translated = translator.translate_function_modules(&module);
+    let mut core_outputs: Vec<(String, String)> = Vec::new();
+    for core_module in &translated.modules {
+        let mut emitter = Emitter::new();
+        let core_source = emitter.emit_module(core_module);
+        let core_filename = format!("{}.core", core_module.name);
+        if let Err(e) = fs::write(&core_filename, &core_source) {
+            eprintln!("Error writing {}: {}", core_filename, e);
+            process::exit(1);
+        }
+        println!("Generated: {}", core_filename);
+        core_outputs.push((core_filename, core_source));
+    }
+    if core_outputs.is_empty() {
+        eprintln!("No functions to compile");
         process::exit(1);
     }
 
-    println!("Generated: {}", core_filename);
+    let metadata_filename = format!("{}.meta.json", module_name);
+    let metadata_json = build_metadata_json(&module_name, &translated);
+    if let Err(e) = fs::write(&metadata_filename, metadata_json) {
+        eprintln!("Error writing {}: {}", metadata_filename, e);
+        process::exit(1);
+    }
+    println!("Generated: {}", metadata_filename);
 
     if emit_core_only {
-        println!("\n{}", core_source);
+        for (core_filename, core_source) in &core_outputs {
+            println!("\n// {}\n{}", core_filename, core_source);
+        }
         return;
     }
 
     println!("Compiling with erlc...");
-    let status = Command::new("erlc")
-        .arg("+from_core")
-        .arg(&core_filename)
-        .status();
+    let mut command = Command::new("erlc");
+    command.arg("+from_core");
+    for (core_filename, _) in &core_outputs {
+        command.arg(core_filename);
+    }
+    let status = command.status();
 
     match status {
         Ok(s) if s.success() => {
-            println!("Generated: {}.beam", module_name);
+            for (core_filename, _) in &core_outputs {
+                let beam_filename = core_filename.replace(".core", ".beam");
+                println!("Generated: {}", beam_filename);
+            }
         }
         Ok(s) => {
             eprintln!("erlc failed with exit code: {:?}", s.code());
@@ -170,13 +190,82 @@ fn main() {
         Err(e) => {
             if e.kind() == std::io::ErrorKind::NotFound {
                 eprintln!("erlc not found. Install Erlang/OTP to compile to BEAM.");
-                eprintln!("Core Erlang output is in: {}", core_filename);
+                eprintln!("Core Erlang outputs:");
+                for (core_filename, _) in &core_outputs {
+                    eprintln!("  {}", core_filename);
+                }
             } else {
                 eprintln!("Error running erlc: {}", e);
             }
             process::exit(1);
         }
     }
+}
+
+fn json_escape(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+fn build_metadata_json(
+    source_module: &str,
+    translated: &lux::codegen::translate::TranslatedFunctionModules,
+) -> String {
+    let mut json = String::new();
+    json.push_str("{\n");
+    json.push_str(&format!(
+        "  \"source_module\": \"{}\",\n",
+        json_escape(source_module)
+    ));
+    match (&translated.entry_module, translated.entry_arity) {
+        (Some(module), Some(arity)) => {
+            json.push_str("  \"entry\": {\n");
+            json.push_str(&format!("    \"module\": \"{}\",\n", json_escape(module)));
+            json.push_str("    \"function\": \"apply\",\n");
+            json.push_str(&format!("    \"arity\": {}\n", arity));
+            json.push_str("  },\n");
+        }
+        _ => {
+            json.push_str("  \"entry\": null,\n");
+        }
+    }
+    json.push_str("  \"functions\": [\n");
+    for (i, item) in translated.metadata.iter().enumerate() {
+        json.push_str("    {\n");
+        json.push_str(&format!(
+            "      \"source_name\": \"{}\",\n",
+            json_escape(&item.source_name)
+        ));
+        json.push_str(&format!(
+            "      \"module\": \"{}\",\n",
+            json_escape(&item.module_name)
+        ));
+        json.push_str("      \"function\": \"apply\",\n");
+        json.push_str(&format!("      \"arity\": {},\n", item.arity));
+        json.push_str(&format!(
+            "      \"hash\": \"{}\"\n",
+            json_escape(&item.module_hash)
+        ));
+        json.push_str("    }");
+        if i + 1 < translated.metadata.len() {
+            json.push(',');
+        }
+        json.push('\n');
+    }
+    json.push_str("  ]\n");
+    json.push('}');
+    json.push('\n');
+    json
 }
 
 fn print_compile_error(err: CompileError) {
